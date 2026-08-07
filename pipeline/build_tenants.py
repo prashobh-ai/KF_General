@@ -24,7 +24,8 @@ from pathlib import Path
 
 from . import packs as packlib
 from .docgen import DocumentBuilder
-from .fabric import BM25, build_graph, build_health, build_insights, extract_passages
+from .fabric import (BM25, build_graph, build_health, build_insights,
+                     extract_passages, link_passages_to_entities)
 from .clusters import build_dendrogram
 from .semantic import build_semantic_index
 
@@ -78,6 +79,7 @@ def build_tenant(pack, docs_target: int) -> dict:
 
     passages = [p for d in docs for p in extract_passages(d)]
     graph = build_graph(pack, docs, builder.world, builder.world_rels)
+    mentions = link_passages_to_entities(passages, graph)
     health = build_health(docs, graph, passages)
     insights = build_insights(pack, docs, graph, passages)
     bm25 = BM25(passages)
@@ -139,6 +141,7 @@ def build_tenant(pack, docs_target: int) -> dict:
             "entities": len(graph["nodes"]),
             "relationships": len(graph["edges"]),
         },
+        "mentions": mentions,
         "health": health["overall"],
         "semantic": {"enabled": sem.get("enabled", False),
                      "components": sem.get("components", 0),

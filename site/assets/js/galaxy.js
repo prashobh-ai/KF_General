@@ -231,7 +231,14 @@
       // Keep the highest-degree nodes. A full corpus graph has a long tail of
       // degree-1 leaves that add cost and read as noise; the hubs are the
       // structure a viewer can actually perceive.
-      const all = graph.nodes.slice().sort((a, b) => b.degree - a.degree);
+      // Rank by how often an entity is actually MENTIONED, then by degree.
+      //
+      // Ranking on degree alone kept the organisational scaffolding and
+      // dropped the subjects and instances that questions actually activate —
+      // so the retrieval highlight had nothing to light up. Mentionable nodes
+      // must survive the cap or the graph cannot react.
+      const score = n => (n.mentions || 0) * 3 + n.degree;
+      const all = graph.nodes.slice().sort((a, b) => score(b) - score(a));
       const keep = all.slice(0, this.opts.maxNodes);
       const idset = new Set(keep.map(n => n.id));
 
@@ -328,7 +335,7 @@
       lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
       lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
       this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, opacity: 0.14,
+        vertexColors: true, transparent: true, opacity: 0.55,
         depthWrite: false, blending: THREE.NormalBlending
       }));
       this.root.add(this.lines);
@@ -437,7 +444,16 @@
       const la = this.lines.geometry.attributes.position.array;
       const lc = this.lines.geometry.attributes.color.array;
       this.edges.forEach((e, i) => {
-        const hid = this.hidden.has(e.s.kind) || this.hidden.has(e.t.kind);
+        // While a question is active, edges outside the activated subgraph are
+        // not drawn at all.
+        //
+        // Fading them was not enough: a thousand strokes at 3% each still
+        // accumulate into a dark scribble on white, and the handful of edges
+        // that answer the question disappear inside it. Removing them entirely
+        // is the only thing that makes the activated relations prominent —
+        // which is the whole purpose of the highlight.
+        const offGraph = anyActive && !(this.activeEdges && this.activeEdges.has(i));
+        const hid = this.hidden.has(e.s.kind) || this.hidden.has(e.t.kind) || offGraph;
         const o = i * 6;
         if (hid) { for (let k = 0; k < 6; k++) la[o + k] = 100000; }
         else {
@@ -449,20 +465,20 @@
         // than a spray of highlighted dots.
         let cs, ct;
         if (!anyActive) {
-          cs = ct = [0.58, 0.72, 0.90];
+          cs = ct = [0.84, 0.89, 0.95];
         } else {
           // An edge touching an activated node is drawn red: requiring BOTH
           // ends to be active made almost no edge qualify, so the lit nodes
           // floated unconnected and the path through the graph was invisible.
-          const touching = e.s.tier === 2 || e.t.tier === 2;
-          const bothNear = e.s.tier >= 1 && e.t.tier >= 1;
-          if (touching) { cs = ct = TIER.ACTIVE; }
-          else if (bothNear) { cs = ct = TIER.RELATED; }
+          const both = e.s.tier === 2 && e.t.tier === 2;
+          const touching = this.activeEdges && this.activeEdges.has(i);
+          if (both) { cs = ct = TIER.ACTIVE; }
+          else if (touching) { cs = ct = [0.55, 0.76, 0.96]; }
           else {
             // Unrelated edges fade almost to the page. Nova pushed these to
             // 0.04 opacity for exactly this reason: without an aggressive
             // fade the activation is invisible from across a room.
-            cs = ct = [0.94, 0.95, 0.97];
+            cs = ct = [0.972, 0.978, 0.986];
           }
         }
         lc[o] = cs[0]; lc[o + 1] = cs[1]; lc[o + 2] = cs[2];
@@ -488,11 +504,20 @@
      *   unrelated   size x0.34,     12% alpha, muted slate
      */
     illuminate(ids) {
-      this.active = new Set(ids || []);
+      this.active = new Set((ids || []).filter(i => this.byId.has(i)));
+
+      // Neighbours are derived from the EDGES, exactly as Nova does it: an
+      // edge with one active end promotes its other end and is itself drawn
+      // active. Deriving neighbours from an adjacency set instead leaves the
+      // connecting edges unlit, and the highlight reads as scattered dots
+      // rather than a traversed region.
       const near = new Set();
-      this.active.forEach(id => {
-        const s = this.adj.get(id);
-        if (s) s.forEach(x => near.add(x));
+      this.activeEdges = new Set();
+      this.edges.forEach((e, i) => {
+        const a = this.active.has(e.s.id), b = this.active.has(e.t.id);
+        if (a && b) { this.activeEdges.add(i); }
+        else if (a) { near.add(e.t.id); this.activeEdges.add(i); }
+        else if (b) { near.add(e.s.id); this.activeEdges.add(i); }
       });
       this.nodes.forEach(n => {
         if (this.active.has(n.id)) {
@@ -503,7 +528,7 @@
           n.tier = 0; n.target = 0;    n.tAlpha = 0.14; n.tSize = 0.30;
         }
       });
-      if (this.lines) this.lines.material.opacity = 0.26;
+      if (this.lines) this.lines.material.opacity = 0.55;
       // A pulse of heat re-energises the layout so lit nodes visibly settle
       // into a new arrangement — motion confirms the answer changed something.
       this.alpha = Math.max(this.alpha, 0.35);
@@ -569,6 +594,7 @@
 
     clearHighlight() {
       this.active.clear();
+      this.activeEdges = null;
       this.nodes.forEach(n => {
         n.tier = 0; n.target = 0; n.tAlpha = 1; n.tSize = 1;
       });
@@ -766,7 +792,7 @@
         rad = Math.max(rad, Math.hypot(n.x - cx, n.y - cy, n.z - cz));
       }
       this.flyTarget = { x: cx, y: cy, z: cz };
-      this.flyDist = Math.max(240, Math.min(1400, rad * 2.6 + 180));
+      this.flyDist = Math.max(230, Math.min(1400, rad * 2.15 + 130));
     }
 
     resize() {

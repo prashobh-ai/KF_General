@@ -328,6 +328,93 @@ def build_graph(pack: Pack, docs: list[dict], world=None, world_rels=None) -> di
 # Knowledge health
 # ---------------------------------------------------------------------------
 
+def link_passages_to_entities(passages: list[dict], graph: dict) -> dict:
+    """Record which entities are actually MENTIONED in each passage.
+
+    This is the difference between a graph that reacts to a question and one
+    that lights the same hubs every time.
+
+    The previous approach activated entities from the *metadata* of retrieved
+    documents — owning unit, system of record, governing authority. Those are
+    shared by nearly every document in a tenant, so every question activated
+    the same handful of hubs and the graph became decoration: colourful,
+    animated, and carrying no information about what was asked.
+
+    Mentions are specific. A question about de-icing lights de-icing, the
+    stations that perform it and the delay codes it produces; a question about
+    crew legality lights something else entirely. That is what makes the
+    visualisation evidence rather than ornament.
+
+    Matching is literal and case-insensitive against entity labels and, for
+    concrete instances, their identifiers. Literal matching under-recalls —
+    it misses paraphrase — but it never asserts a mention that is not in the
+    text, and a highlight the user cannot verify by reading the passage is
+    worse than a missing one.
+    """
+    # Build a matcher per entity. Short labels are skipped: a two-character
+    # code matches inside unrelated words and would light constantly.
+    matchers: list[tuple[str, str]] = []
+    for n in graph["nodes"]:
+        label = (n.get("label") or "").strip()
+        ref = str(n.get("ref") or "").strip()
+        needle = None
+        if ref and len(ref) >= 4:
+            needle = ref.lower()
+        elif len(label) >= 5:
+            # Instance labels carry a type prefix ("Aircraft N912ZZ"); the
+            # distinctive part is what appears in prose.
+            needle = label.split("\u00b7")[0].strip().lower()
+        if needle and len(needle) >= 4:
+            matchers.append((n["id"], needle))
+
+    mention_counts: Counter = Counter()
+    for p in passages:
+        text = p["text"].lower()
+        hits = [eid for eid, needle in matchers if needle in text]
+        # A passage that "mentions" thirty entities is matching noise, not
+        # content; keep the most specific by needle length.
+        if len(hits) > 12:
+            order = {eid: len(nd) for eid, nd in matchers}
+            hits.sort(key=lambda e: -order.get(e, 0))
+            hits = hits[:12]
+        p["ents"] = hits
+        mention_counts.update(hits)
+
+    # Boilerplate suppression.
+    #
+    # A system of record named in the control header of every document is
+    # mentioned in a third of all passages. It is a true mention and a useless
+    # one: it activates on every question, and because it is a high-degree hub
+    # it drags hundreds of edges into the highlight, burying the handful of
+    # entities that actually answer the question.
+    #
+    # This is the same problem as a stop word, and the same fix: an entity
+    # present in more than a third of passages carries no discriminating
+    # signal, so it is excluded from activation while remaining in the graph.
+    ceiling = max(6, int(len(passages) * 0.33))
+    boilerplate = {e for e, c in mention_counts.items() if c > ceiling}
+    if boilerplate:
+        for p in passages:
+            if p.get("ents"):
+                p["ents"] = [e for e in p["ents"] if e not in boilerplate]
+        mention_counts = Counter()
+        for p in passages:
+            mention_counts.update(p.get("ents", []))
+
+    for n in graph["nodes"]:
+        n["mentions"] = mention_counts.get(n["id"], 0)
+        n["boilerplate"] = n["id"] in boilerplate
+
+    return {
+        "boilerplateSuppressed": len(boilerplate),
+        "mentionCeiling": ceiling,
+        "passagesLinked": sum(1 for p in passages if p.get("ents")),
+        "meanEntitiesPerPassage": round(
+            sum(len(p.get("ents", [])) for p in passages) / max(1, len(passages)), 2),
+        "entitiesMentioned": len([n for n in graph["nodes"] if n["mentions"]]),
+    }
+
+
 def build_health(docs: list[dict], graph: dict, passages: list[dict],
                  today: str = "2026-05-31") -> dict:
     """Score the corpus on five measures a knowledge owner can act on.

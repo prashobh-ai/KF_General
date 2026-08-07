@@ -796,15 +796,29 @@
      * top few documents carry the answer; those are the ones worth showing.
      */
     entitiesFor(hits) {
-      const ids = new Set();
-      for (const h of hits.slice(0, 5)) {
-        const d = this.docs.get(h.p.doc);
-        if (!d) continue;
-        [`unit:${d.unit}`, `system:${d.system}`, `authority:${d.authority}`,
-         `site:${d.site}`, `subject:${d.subject}`, `doctype:${d.type_key}`,
-         `role:${d.owner_role}`].forEach(x => ids.add(x));
-      }
-      return [...ids];
+      // Entities MENTIONED in the retrieved passages, not the metadata of the
+      // documents they came from.
+      //
+      // Metadata activation lit the owning unit, system of record and governing
+      // authority of every retrieved document. Those are shared across a
+      // tenant, so every question activated the same hubs and the graph
+      // stopped carrying information about what was asked. Mentions vary
+      // sharply: a de-icing question lights de-icing, its stations and its
+      // delay codes; a crew-legality question lights something else.
+      const weight = new Map();
+      hits.slice(0, 12).forEach((h, rank) => {
+        const ents = (h.p && h.p.ents) || [];
+        // Rank-weighted, so the passage that actually answered the question
+        // contributes more than the twelfth-best match.
+        const w = 1 / (1 + rank * 0.35);
+        for (const e of ents) weight.set(e, (weight.get(e) || 0) + w);
+      });
+
+      if (!weight.size) return [];
+      return [...weight.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 14)
+        .map(([id]) => id);
     }
 
     lineage(r) {

@@ -287,6 +287,40 @@ units means the same subject is being documented independently in seven places.
 Rendered radially because the meaningful structure is the top-level split near
 the centre, and a circle gives every leaf equal room on the rim.
 
+### Graph activation is driven by mentions, not metadata
+
+This is the difference between a graph that answers a question and one that
+decorates it.
+
+An earlier build activated the graph from the *metadata* of retrieved
+documents — owning unit, system of record, governing authority. Those fields
+are shared across almost every document in a tenant, so every question lit the
+same handful of hubs. The graph was colourful, animated, and carried no
+information about what had been asked.
+
+Activation now comes from entities **actually mentioned in the retrieved
+passages**, linked at build time by literal matching against entity labels and
+identifiers. Matching literally under-recalls — it misses paraphrase — but it
+never asserts a mention that is not in the text, and a highlight the reader
+cannot verify by opening the passage is worse than a missing one.
+
+Two supporting rules make it legible:
+
+- **Boilerplate suppression.** A system of record named in the control header
+  of every document is mentioned in a third of all passages. That is a true
+  mention and a useless one — it fires on every question and, being a
+  high-degree hub, drags hundreds of edges into the highlight. Entities above a
+  frequency ceiling are excluded from activation while staying in the graph.
+  Same problem as a stop word, same fix.
+- **Edges outside the activated subgraph are not drawn.** Fading them was not
+  enough: a thousand strokes at three percent each still accumulate into a dark
+  scribble on white, burying the handful of edges that answer the question.
+
+Node ranking also changed. The rendered subset was chosen by degree, which kept
+the organisational scaffolding and dropped the subjects and instances questions
+actually activate — so the highlight had nothing to light. Ranking now weights
+mention count above degree.
+
 ### Graph activation
 
 Legibility comes from collapsing size and opacity together, not from colour

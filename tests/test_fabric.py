@@ -471,3 +471,74 @@ def test_every_leaf_has_a_cluster_colour(tenant):
 
     walk(d["tree"])
     assert seen - {0}, "no leaf carries a cluster assignment"
+
+
+# ---------------------------------------------------------------------------
+# Graph activation
+# ---------------------------------------------------------------------------
+
+def test_passages_carry_entity_mentions(tenant):
+    """Activation is driven by entities MENTIONED in retrieved passages.
+
+    An earlier build activated the graph from the metadata of retrieved
+    documents — owning unit, system of record, governing authority. Those are
+    shared across a tenant, so every question lit the same hubs and the graph
+    carried no information about what was asked.
+    """
+    passages = tenant["index"]["passages"]
+    linked = [p for p in passages if p.get("ents")]
+    assert len(linked) / max(1, len(passages)) > 0.4, (
+        f"only {len(linked)}/{len(passages)} passages mention any entity — "
+        "the graph cannot react to a question")
+
+
+def test_mentioned_entities_resolve_to_graph_nodes(tenant):
+    ids = {n["id"] for n in tenant["graph"]["nodes"]}
+    for p in tenant["index"]["passages"][:400]:
+        for e in p.get("ents", []):
+            assert e in ids, f"passage cites unknown entity {e}"
+
+
+def test_boilerplate_entities_are_suppressed(tenant):
+    """An entity named in most passages activates on every question and drags
+    its whole neighbourhood into the highlight."""
+    passages = tenant["index"]["passages"]
+    counts: dict[str, int] = {}
+    for p in passages:
+        for e in p.get("ents", []):
+            counts[e] = counts.get(e, 0) + 1
+    ceiling = max(6, int(len(passages) * 0.33))
+    over = {e: c for e, c in counts.items() if c > ceiling}
+    assert not over, f"boilerplate entities still activate: {over}"
+
+
+def test_activation_differs_between_questions(tenant):
+    """The point of the whole mechanism: different questions must light
+    different parts of the graph."""
+    passages = tenant["index"]["passages"]
+    seed_questions = tenant["manifest"]["questions"]
+    def tok(t):
+        return {x.lower() for x in re.findall(r"[A-Za-z][A-Za-z0-9\-]{3,}", t)}
+
+    sets = []
+    for q in seed_questions:
+        terms = tok(q)
+        # Mirror the engine: rank passages by overlap and activate only the
+        # top few. Unioning every passage that shares any word activates the
+        # whole corpus and the comparison becomes meaningless — which is what
+        # an earlier version of this test did to itself.
+        scored = sorted(
+            ((len(terms & tok(p["text"])), i) for i, p in enumerate(passages)),
+            reverse=True)[:12]
+        active = set()
+        for score, i in scored:
+            if score:
+                active.update(passages[i].get("ents", []))
+        sets.append(active)
+    populated = [s for s in sets if s]
+    assert len(populated) >= 2, "seed questions activate nothing"
+    # At least one pair must differ materially, or activation is constant.
+    distinct = any(
+        len(a ^ b) / max(1, len(a | b)) > 0.2
+        for i, a in enumerate(populated) for b in populated[i + 1:])
+    assert distinct, "every question activates the same entities"
