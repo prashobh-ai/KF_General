@@ -826,3 +826,106 @@ footer .note { font-size: .78rem; color: var(--ink-faint); max-width: 68ch; }
   .flip-in { transition: none; }
   .ring-arc { transition: none; }
 }
+
+/* ============================================================================
+   Typeahead — the tested-question dropdown
+   ========================================================================= */
+.ta-list {
+  position: absolute;
+  top: calc(100% + .5rem); left: 0; right: 0;
+  z-index: 60;
+  margin: 0; padding: .35rem;
+  list-style: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 18px 44px rgba(31, 42, 61, .16), 0 2px 8px rgba(31, 42, 61, .06);
+  max-height: min(52vh, 26rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: taIn .16s var(--ease) both;
+}
+@keyframes taIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+.ta-list[hidden] { display: none; }
+
+.ta-item {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .58rem .7rem;
+  border-radius: 11px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: .875rem; line-height: 1.35;
+  transition: background .14s, color .14s;
+}
+/* Pointer hover and keyboard selection must look identical, or arrowing down
+   feels like a different control from the one the mouse drives. */
+.ta-item:hover, .ta-item.is-active { background: var(--bg-hover); color: var(--ink); }
+.ta-item.is-active { box-shadow: inset 2px 0 0 var(--accent); }
+
+.ta-icon {
+  flex: none; width: 15px; height: 15px; border-radius: 50%;
+  border: 1.5px solid var(--ink-faint);
+  position: relative; opacity: .75;
+}
+.ta-icon::after {
+  content: ''; position: absolute; right: -3px; bottom: -3px;
+  width: 6px; height: 1.5px; background: var(--ink-faint);
+  transform: rotate(45deg); transform-origin: right center;
+}
+.ta-item.is-active .ta-icon, .ta-item:hover .ta-icon { border-color: var(--accent); opacity: 1; }
+.ta-item.is-active .ta-icon::after, .ta-item:hover .ta-icon::after { background: var(--accent); }
+
+.ta-text { flex: 1; min-width: 0; }
+/* The match is marked so the user can see WHY a row is being offered. */
+.ta-text mark {
+  background: rgba(var(--accent-rgb), .16);
+  color: var(--accent);
+  border-radius: 3px; padding: 0 1px; font-weight: 600;
+}
+.ta-tier {
+  flex: none; font-size: .68rem; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-faint); border: 1px solid var(--line); border-radius: 999px;
+  padding: .1rem .4rem;
+}
+.ta-foot {
+  padding: .45rem .7rem .3rem;
+  font-size: .72rem; color: var(--ink-faint);
+  border-top: 1px solid var(--line); margin-top: .25rem;
+}
+@media (max-width: 640px) { .ta-tier { display: none; } .ta-item { padding: .66rem .7rem; } }
+
+/* ============================================================================
+   Graph activation flash
+
+   Nova pulses the canvas the instant a trace lands, so the change is FELT
+   before it is read. Without it the three-tier recolour is correct but
+   undramatic, and a viewer several feet from the screen misses the moment the
+   answer connected to the graph.
+   ========================================================================= */
+.graph-activated::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  /* Above the vignette, which occupies .stage::after on this same element —
+     hence ::before here. Using ::after would silently replace the vignette and
+     the graph would lose its edge falloff for the duration of every answer. */
+  z-index: 4;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 50%,
+              rgba(255, 80, 4, .22) 0%,
+              rgba(255, 80, 4, .10) 34%,
+              transparent 68%);
+  animation: graphBoom 1.7s var(--ease) forwards;
+}
+@keyframes graphBoom {
+  0%   { opacity: 0;   transform: scale(.55); }
+  18%  { opacity: 1;   transform: scale(1);   }
+  100% { opacity: 0;   transform: scale(1.5); }
+}
+/* Honour a stated preference for reduced motion: keep the confirmation, drop
+   the expansion. */
+@media (prefers-reduced-motion: reduce) {
+  .graph-activated::before { animation: graphFade .8s ease-out forwards; }
+  @keyframes graphFade { 0% { opacity: .5; } 100% { opacity: 0; } }
+  .ta-list { animation: none; }
+}
