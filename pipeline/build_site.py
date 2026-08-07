@@ -68,7 +68,8 @@ def head(title: str, desc: str, base: str, accent: str = "#0B66E1") -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{html.escape(title)}</title>
 <meta name="description" content="{html.escape(desc)}">
-<meta name="theme-color" content="#0A1224">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="icon" href="{base}assets/brand/favicon.png" type="image/png">
 <meta property="og:title" content="{html.escape(title)}">
 <meta property="og:description" content="{html.escape(desc)}">
 <meta property="og:type" content="website">
@@ -138,19 +139,11 @@ def build_index(registry: dict) -> str:
         <div class="sheen"></div>
         <div class="card-pad">
           <div class="top">
-            <span class="glyph">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                   stroke="{x['accent']}" stroke-width="2" stroke-linecap="round">
-                <circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="18" r="2.4"/>
-                <circle cx="19" cy="18" r="2.4"/>
-                <path d="M12 7.4 6.6 15.8M12 7.4l5.4 8.4M7.4 18h9.2"/>
-              </svg>
-            </span>
-            <span>
-              <span class="ind">{html.escape(x['industry'])}</span>
-              <span class="nm">{html.escape(x['tenant'])}</span>
-            </span>
+            <img class="tile-logo" src="assets/brand/{x['slug']}-lockup.png"
+                 alt="{html.escape(x['slug'])}" loading="lazy" decoding="async">
           </div>
+          <span class="ind">{html.escape(x['industry'])}</span>
+          <span class="nm">{html.escape(x['tenant'])}</span>
           <p class="small muted" style="margin:0">{html.escape(x['tagline'])}</p>
           <div class="facts">
             <div><b>{c['documents']}</b>documents</div>
@@ -367,7 +360,7 @@ def build_demo(m: dict) -> str:
     rgb = tuple(int(m["accent"].lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
     base = "../../"
     links = [("Graph", "#graph"), ("Answer", "#answerSection"),
-             ("Findings", "#findingsSection"), ("vs RAG", "#compareSection"),
+             ("Findings", "#findingsSection"),
              ("Lineage", "#lineageSection"), ("Health", "#health"),
              ("Insights", "#insights"), ("Corpus", "#corpus")]
 
@@ -403,10 +396,14 @@ def build_demo(m: dict) -> str:
   <section style="padding-top:clamp(2.4rem,5vh,4rem);padding-bottom:2rem">
     <div class="wrap">
       <div class="row between rise" style="margin-bottom:1.6rem">
-        <div>
-          <div class="eyebrow" style="margin-bottom:.7rem">{html.escape(m['industry'])}</div>
-          <h1 style="font-size:clamp(2rem,4.4vw,3.4rem)">{html.escape(m['tenant'])}</h1>
-          <p class="small muted" style="margin-top:.5rem">{html.escape(m['tagline'])}</p>
+        <div class="row" style="gap:1.4rem;align-items:center">
+          <img class="tenant-lockup" src="{base}assets/brand/{slug}-lockup.png"
+               alt="{html.escape(m['tenant'])}" loading="eager" decoding="async">
+          <div>
+            <div class="eyebrow" style="margin-bottom:.7rem">{html.escape(m['industry'])}</div>
+            <h1 style="font-size:clamp(1.7rem,3.6vw,2.9rem)">{html.escape(m['tenant'])}</h1>
+            <p class="small muted" style="margin-top:.5rem">{html.escape(m['tagline'])}</p>
+          </div>
         </div>
         <a class="btn btn-ghost btn-sm" href="{base}index.html">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -488,27 +485,6 @@ def build_demo(m: dict) -> str:
       <div class="card rise"><div class="card-pad" style="padding:1.8rem">
         <div id="findings"><p class="muted small">Ask a question to traverse the graph.</p></div>
       </div></div>
-    </div>
-  </section>
-
-  <section id="compareSection">
-    <div class="wrap">
-      <div class="section-head">
-        <div class="eyebrow rise">Fabric versus RAG</div>
-        <h2 class="rise">Run the same question both ways.</h2>
-        <p class="lede rise" style="margin-top:1rem">
-          "A knowledge graph beats RAG" is an assertion until you can point at
-          what one finds and the other cannot. This runs your question twice —
-          retrieval alone, then retrieval plus traversal — and reports the
-          difference on your own query.
-        </p>
-        <button class="btn btn-flare rise" id="compareBtn" style="margin-top:1.4rem">
-          Compare on my question
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.4" stroke-linecap="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
-        </button>
-      </div>
-      <div id="compare"><p class="muted small">Ask a question above, then run the comparison.</p></div>
     </div>
   </section>
 

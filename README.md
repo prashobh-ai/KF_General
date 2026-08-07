@@ -152,9 +152,9 @@ Retrieval returns the AD documents and leaves the join to the reader.
 
 Measured live on that question: retrieval cites 5 documents; traversal
 additionally resolves **38 connected entities** assembled across 59 further
-documents. The **Fabric vs RAG** panel runs any question both ways and reports
-the difference, so the claim is demonstrated rather than asserted — including
-when the graph adds nothing, which it says plainly.
+documents. The **Graph findings** panel shows that resolved set with the
+traversal path justifying each entity — and says plainly when a question named
+nothing to traverse from, which is the honest answer for definitional queries.
 
 Single-document co-citation is pruned: two entities together in one document may
 only mean both were in scope that day; two or more independent documents is a
@@ -183,18 +183,38 @@ and reversed the sign.
 
 ## Visual design
 
-Palette and typography follow the QualiZeal brand: primary blue `#0B66E1`,
-signal red `#FF3300` used sparingly as the one moment of heat, navy `#1F2A3D`,
-frost tints. Surface is dark because the signature element is a luminous WebGL
-graph — glow reads as light on dark and as haze on light.
+White ground, following the QualiZeal deck: primary blue `#0B66E1`, signal red
+`#FF3300` used sparingly as the one moment of heat, navy ink `#1F2A3D`, frost
+tints. The QualiZeal mark sits as a fixed page watermark at 5% opacity — a
+watermark large enough to notice is a watermark competing with the interface.
 
-The graph renders nodes as additive point sprites in a single draw call rather
-than meshes: a thousand lit spheres is a thousand draw calls and melts a phone,
-and additive accumulation is what makes a dense core look luminous rather than
-cluttered. Repulsion is degree-weighted so hubs push apart into distinct lobes
-instead of collapsing into one mass, and a global energy budget scales
-brightness down as more nodes light up, because additive blending has no
-headroom and forty lit nodes would otherwise clip to featureless white.
+Each tenant carries its own **Q-Domain** lockup (`site/assets/brand/`), leading
+the card on the landing page and the hero on its demonstration. The lockups
+already carry the wordmark, so the trading name sits beneath as secondary
+information rather than competing with it.
+
+### Graph activation
+
+Legibility comes from collapsing size and opacity together, not from colour
+alone. During a query the graph drops entity-kind hues and switches to three
+activation tiers:
+
+| Tier | Colour | Size | Opacity |
+|---|---|---|---|
+| Activated | signal red | ×1.32 | 1.00 |
+| Neighbour | primary blue | ×0.86 | 0.90 |
+| Unrelated | muted slate | ×0.30 | 0.14 |
+
+Edges touching an activated node turn red; everything else fades almost into
+the page. Eight competing hues is what made activation unreadable in an earlier
+build — during an answer the only question that matters is *did this light up*.
+
+Nodes render as solid discs under normal blending in a single draw call.
+Additive blending was the right choice on a dark ground and exactly wrong on
+white, where adding light can only wash toward invisible. Repulsion is
+degree-weighted so hubs push apart into distinct lobes rather than collapsing
+into one mass, and the camera frames to the graph's own extent so the composite
+overview and a single tenant both fill their stage.
 
 When an answer lands, pulses of light travel the exact traversal hops — the
 graph is seen being *walked*, not merely coloured.

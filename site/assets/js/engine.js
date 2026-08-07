@@ -787,9 +787,17 @@
 
     // -- graph --------------------------------------------------------------
 
+    /**
+     * Entities to activate in the graph.
+     *
+     * Deliberately narrow. Lighting every entity touched by every retrieved
+     * document turns most of the graph red, and a graph where everything is
+     * highlighted communicates exactly as much as one where nothing is. The
+     * top few documents carry the answer; those are the ones worth showing.
+     */
     entitiesFor(hits) {
       const ids = new Set();
-      for (const h of hits) {
+      for (const h of hits.slice(0, 5)) {
         const d = this.docs.get(h.p.doc);
         if (!d) continue;
         [`unit:${d.unit}`, `system:${d.system}`, `authority:${d.authority}`,

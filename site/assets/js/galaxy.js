@@ -21,6 +21,14 @@
 (function (global) {
   'use strict';
 
+  // Activation palette. The base tone is deliberately close to the page so
+  // unrelated nodes recede rather than compete.
+  const TIER = {
+    ACTIVE:   [1.00, 0.20, 0.00],   // QualiZeal signal red
+    RELATED:  [0.04, 0.40, 0.88],   // QualiZeal primary blue
+    BASE:     [0.62, 0.68, 0.78],   // muted slate
+  };
+
   const KIND_COLOR = {
     unit:      [0.15, 0.55, 1.00],
     system:    [0.00, 0.72, 0.96],
@@ -65,11 +73,11 @@
 
   // Instance nodes are the foreground; structural nodes are context. Sizing
   // them apart is what stops the graph reading as undifferentiated confetti.
-  const DEFAULT_INSTANCE_SIZE = 22;
+  const DEFAULT_INSTANCE_SIZE = 13;
 
   const KIND_SIZE = {
-    unit: 62, system: 52, authority: 56, site: 42,
-    subject: 30, doctype: 48, role: 36, code: 24
+    unit: 30, system: 26, authority: 27, site: 21,
+    subject: 15, doctype: 24, role: 18, code: 12
   };
 
   // ---------------------------------------------------------------------------
@@ -83,11 +91,13 @@
     attribute float size;
     attribute vec3  tint;
     attribute float glow;
+    attribute float alpha;
     varying   vec3  vTint;
     varying   float vGlow;
+    varying   float vAlpha;
     uniform   float uScale;
-    uniform   float uEnergy;
     void main() {
+      vAlpha = alpha;
       vTint = tint;
       vGlow = glow;
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -99,20 +109,25 @@
   const NODE_FS = `
     varying vec3  vTint;
     varying float vGlow;
-    uniform float uEnergy;
+    varying float vAlpha;
     void main() {
       vec2 uv = gl_PointCoord - vec2(0.5);
       float d = length(uv) * 2.0;
       if (d > 1.0) discard;
-      float halo = pow(1.0 - d, 1.9);
-      float core = pow(max(0.0, 1.0 - d * 2.1), 2.8);
-      float spark = pow(max(0.0, 1.0 - d * 5.5), 2.2);
-      float a = halo * 0.20 + core * 0.46 + spark * 0.34;
-      // Keep the tint dominant. Pushing the core toward white is what washed
-      // the dense centre out to a featureless blob under additive blending.
-      vec3 c = mix(vTint, vec3(1.0), core * 0.34 + spark * 0.20);
-      gl_FragColor = vec4(c * (1.05 + vGlow * 1.15) * uEnergy,
-                          a * (0.62 + vGlow * 0.55) * uEnergy);
+
+      // Solid disc with an antialiased rim, plus a soft outer ring that
+      // strengthens with activation so a lit node reads as haloed rather than
+      // merely larger.
+      float disc = 1.0 - smoothstep(0.62, 0.78, d);
+      float ring = (1.0 - smoothstep(0.70, 1.0, d)) * 0.22 * vGlow;
+
+      // Lit nodes gain a white specular centre, which on paper reads as gloss.
+      vec3 c = mix(vTint, mix(vTint, vec3(1.0), 0.45),
+                   vGlow * (1.0 - smoothstep(0.0, 0.42, d)));
+
+      float a = (disc + ring) * vAlpha;
+      if (a < 0.01) discard;
+      gl_FragColor = vec4(c, a);
     }
   `;
 
@@ -211,7 +226,8 @@
           y: (Math.random() - 0.5) * 380,
           z: (Math.random() - 0.5) * 380,
           vx: 0, vy: 0, vz: 0,
-          glow: 0
+          glow: 0, tier: 0, alpha: 1, sizeMul: 1,
+          tAlpha: 1, tSize: 1
         };
         this.byId.set(n.id, v);
         return v;
@@ -236,6 +252,14 @@
       if (accentHex) this.accent = new THREE.Color(accentHex);
       this._buildMeshes();
       this._settle(300);
+
+      // Frame to content rather than to a constant. The composite overview
+      // graph is several times the extent of a single tenant's.
+      let ext = 0;
+      for (const n of this.nodes) {
+        ext = Math.max(ext, Math.hypot(n.x, n.y, n.z));
+      }
+      this.dist = Math.max(360, Math.min(1500, ext * 2.35));
       this.start();
     }
 
@@ -249,11 +273,14 @@
       const size = new Float32Array(N);
       const tint = new Float32Array(N * 3);
       const glow = new Float32Array(N);
+      const alpha = new Float32Array(N).fill(1);
 
       this.nodes.forEach((n, i) => {
         const c = KIND_COLOR[n.kind] || [0.6, 0.7, 0.9];
         tint[i * 3] = c[0]; tint[i * 3 + 1] = c[1]; tint[i * 3 + 2] = c[2];
-        size[i] = (KIND_SIZE[n.kind] || DEFAULT_INSTANCE_SIZE) * (1 + Math.min(n.degree, 30) / 52);
+        n.baseSize = (KIND_SIZE[n.kind] || DEFAULT_INSTANCE_SIZE) *
+                     (1 + Math.min(n.degree, 30) / 52);
+        size[i] = n.baseSize;
         glow[i] = 0;
       });
 
@@ -262,14 +289,15 @@
       g.setAttribute('size', new THREE.BufferAttribute(size, 1));
       g.setAttribute('tint', new THREE.BufferAttribute(tint, 3));
       g.setAttribute('glow', new THREE.BufferAttribute(glow, 1));
+      g.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1));
 
       this.pts = new THREE.Points(g, new THREE.ShaderMaterial({
-        uniforms: { uScale: { value: 1.0 }, uEnergy: { value: 1.0 } },
+        uniforms: { uScale: { value: 1.0 } },
         vertexShader: NODE_VS,
         fragmentShader: NODE_FS,
         transparent: true,
         depthWrite: false,
-        blending: THREE.AdditiveBlending
+        blending: THREE.NormalBlending
       }));
       this.root.add(this.pts);
 
@@ -280,8 +308,8 @@
       lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
       lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
       this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, opacity: 0.52,
-        depthWrite: false, blending: THREE.AdditiveBlending
+        vertexColors: true, transparent: true, opacity: 0.34,
+        depthWrite: false, blending: THREE.NormalBlending
       }));
       this.root.add(this.lines);
 
@@ -337,15 +365,35 @@
     }
 
     _sync() {
-      const pa = this.pts.geometry.attributes.position.array;
-      const ga = this.pts.geometry.attributes.glow.array;
+      const attrs = this.pts.geometry.attributes;
+      const pa = attrs.position.array, ga = attrs.glow.array;
+      const aa = attrs.alpha.array, sa = attrs.size.array, ta = attrs.tint.array;
+      const anyActive = this.active.size > 0;
+
       this.nodes.forEach((n, i) => {
         const off = this.hidden.has(n.kind) ? 100000 : 0;
         pa[i * 3] = n.x + off; pa[i * 3 + 1] = n.y; pa[i * 3 + 2] = n.z;
         ga[i] = n.glow;
+        aa[i] = n.alpha;
+        sa[i] = n.baseSize * n.sizeMul;
+
+        // Recolour by activation tier rather than by entity kind while a
+        // query is live. Kind colour is useful for browsing, but during an
+        // answer the only question that matters is "did this light up?" —
+        // and eight hues competing for attention is what made activation
+        // unreadable before.
+        let c;
+        if (!anyActive) c = KIND_COLOR[n.kind] || TIER.BASE;
+        else if (n.tier === 2) c = TIER.ACTIVE;
+        else if (n.tier === 1) c = TIER.RELATED;
+        else c = TIER.BASE;
+        ta[i * 3] = c[0]; ta[i * 3 + 1] = c[1]; ta[i * 3 + 2] = c[2];
       });
-      this.pts.geometry.attributes.position.needsUpdate = true;
-      this.pts.geometry.attributes.glow.needsUpdate = true;
+      attrs.position.needsUpdate = true;
+      attrs.glow.needsUpdate = true;
+      attrs.alpha.needsUpdate = true;
+      attrs.size.needsUpdate = true;
+      attrs.tint.needsUpdate = true;
 
       const la = this.lines.geometry.attributes.position.array;
       const lc = this.lines.geometry.attributes.color.array;
@@ -357,12 +405,29 @@
           la[o] = e.s.x; la[o + 1] = e.s.y; la[o + 2] = e.s.z;
           la[o + 3] = e.t.x; la[o + 4] = e.t.y; la[o + 5] = e.t.z;
         }
-        const lit = e.s.glow > 0.05 || e.t.glow > 0.05;
-        const cs = KIND_COLOR[e.s.kind] || [.5, .6, .8];
-        const ct = KIND_COLOR[e.t.kind] || [.5, .6, .8];
-        const m = lit ? 2.2 : 0.62;
-        lc[o] = cs[0] * m; lc[o + 1] = cs[1] * m; lc[o + 2] = cs[2] * m;
-        lc[o + 3] = ct[0] * m; lc[o + 4] = ct[1] * m; lc[o + 5] = ct[2] * m;
+        // An edge is active only when BOTH ends are in the activated set —
+        // that is what makes the lit subgraph read as a connected path rather
+        // than a spray of highlighted dots.
+        let cs, ct;
+        if (!anyActive) {
+          cs = ct = [0.72, 0.78, 0.88];
+        } else {
+          // An edge touching an activated node is drawn red: requiring BOTH
+          // ends to be active made almost no edge qualify, so the lit nodes
+          // floated unconnected and the path through the graph was invisible.
+          const touching = e.s.tier === 2 || e.t.tier === 2;
+          const bothNear = e.s.tier >= 1 && e.t.tier >= 1;
+          if (touching) { cs = ct = TIER.ACTIVE; }
+          else if (bothNear) { cs = ct = TIER.RELATED; }
+          else {
+            // Unrelated edges fade almost to the page. Nova pushed these to
+            // 0.04 opacity for exactly this reason: without an aggressive
+            // fade the activation is invisible from across a room.
+            cs = ct = [0.94, 0.95, 0.97];
+          }
+        }
+        lc[o] = cs[0]; lc[o + 1] = cs[1]; lc[o + 2] = cs[2];
+        lc[o + 3] = ct[0]; lc[o + 4] = ct[1]; lc[o + 5] = ct[2];
       });
       this.lines.geometry.attributes.position.needsUpdate = true;
       this.lines.geometry.attributes.color.needsUpdate = true;
@@ -371,24 +436,35 @@
     // -- highlight ----------------------------------------------------------
 
     /** Light a set of node ids and their immediate neighbours. */
+    /**
+     * Three-tier activation.
+     *
+     * Modulating glow alone — which is what this did before — is far too
+     * subtle: the graph stayed uniformly colourful and a viewer could not tell
+     * which nodes had fired. Legibility comes from collapsing SIZE and OPACITY
+     * together, so unrelated structure physically recedes:
+     *
+     *   activated   full size x1.7, opaque, signal red
+     *   neighbour   normal size,    opaque, primary blue
+     *   unrelated   size x0.34,     12% alpha, muted slate
+     */
     illuminate(ids) {
       this.active = new Set(ids || []);
-      const lit = this.active.size;
-      // Additive blending has no headroom: 40 lit nodes in a dense core clip to
-      // white and the structure disappears. Scale total energy down as more
-      // nodes activate so the eye still reads shape.
-      if (this.pts) {
-        this.pts.material.uniforms.uEnergy.value =
-          Math.max(0.42, 1.0 - Math.min(lit, 60) / 95);
-      }
       const near = new Set();
       this.active.forEach(id => {
         const s = this.adj.get(id);
         if (s) s.forEach(x => near.add(x));
       });
       this.nodes.forEach(n => {
-        n.target = this.active.has(n.id) ? 1 : (near.has(n.id) ? 0.42 : 0);
+        if (this.active.has(n.id)) {
+          n.tier = 2; n.target = 1;    n.tAlpha = 1.0;  n.tSize = 1.32;
+        } else if (near.has(n.id)) {
+          n.tier = 1; n.target = 0.35; n.tAlpha = 0.90; n.tSize = 0.86;
+        } else {
+          n.tier = 0; n.target = 0;    n.tAlpha = 0.14; n.tSize = 0.30;
+        }
       });
+      if (this.lines) this.lines.material.opacity = 0.20;
       // A pulse of heat re-energises the layout so lit nodes visibly settle
       // into a new arrangement — motion confirms the answer changed something.
       this.alpha = Math.max(this.alpha, 0.35);
@@ -454,8 +530,10 @@
 
     clearHighlight() {
       this.active.clear();
-      if (this.pts) this.pts.material.uniforms.uEnergy.value = 1.0;
-      this.nodes.forEach(n => { n.target = 0; });
+      this.nodes.forEach(n => {
+        n.tier = 0; n.target = 0; n.tAlpha = 1; n.tSize = 1;
+      });
+      if (this.lines) this.lines.material.opacity = 0.34;
     }
 
     toggleKind(kind) {
@@ -574,10 +652,9 @@
       let dirty = this.alpha > 0.012;
       for (const n of this.nodes) {
         const t = n.target || 0;
-        if (Math.abs(n.glow - t) > 0.004) {
-          n.glow += (t - n.glow) * 0.12;
-          dirty = true;
-        }
+        if (Math.abs(n.glow - t) > 0.004) { n.glow += (t - n.glow) * 0.12; dirty = true; }
+        if (Math.abs(n.alpha - n.tAlpha) > 0.004) { n.alpha += (n.tAlpha - n.alpha) * 0.14; dirty = true; }
+        if (Math.abs(n.sizeMul - n.tSize) > 0.004) { n.sizeMul += (n.tSize - n.sizeMul) * 0.14; dirty = true; }
       }
       if (dirty) this._sync();
 

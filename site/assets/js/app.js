@@ -365,50 +365,6 @@
     }));
   }
 
-  /* Runs the same question with and without traversal, so the difference is
-     demonstrated on the user's own query rather than asserted in marketing copy. */
-  function runCompare() {
-    const q = ($('#q').value || '').trim();
-    if (!q) return;
-    const box = $('#compare');
-    box.innerHTML = `<div class="skel" style="height:120px"></div>`;
-    setTimeout(() => {
-      const c = engine.compare(q);
-      const ragN = c.rag.ok ? c.rag.sources : 0;
-      const fabN = c.fabric.ok ? c.fabric.sources : 0;
-      box.innerHTML = `
-        <div class="grid g2">
-          <div class="card"><div class="card-pad">
-            <span class="badge">Vector / lexical RAG</span>
-            <h3 style="margin:.8rem 0 .5rem;font-size:1rem">Retrieval only</h3>
-            <div class="stat"><div class="n">${ragN}</div><div class="l">documents cited</div></div>
-            <p class="small muted" style="margin-top:1rem">Finds passages that mention
-            the question. Stops at the vocabulary of the query.</p>
-          </div></div>
-          <div class="card" style="border-color:var(--line-hot)"><div class="card-pad">
-            <span class="badge red">Knowledge Fabric</span>
-            <h3 style="margin:.8rem 0 .5rem;font-size:1rem">Retrieval + traversal</h3>
-            <div class="row" style="gap:2rem">
-              <div class="stat"><div class="n">${fabN}</div><div class="l">documents cited</div></div>
-              <div class="stat"><div class="n" style="color:var(--qz-red-warm)">${c.findingCount}</div>
-                <div class="l">entities resolved</div></div>
-            </div>
-            <p class="small muted" style="margin-top:1rem">Joins relationships across
-            documents to assemble an answer set none of them states.</p>
-          </div></div>
-        </div>
-        <div class="card mt"><div class="card-pad">
-          <div class="eyebrow">Verdict</div>
-          <p class="small" style="margin:.6rem 0 0;color:var(--ink)">${esc(c.verdict)}</p>
-          ${c.paths.length ? `<div class="eyebrow" style="margin:1.4rem 0 .7rem">Traversal paths</div>
-            <div class="rail">${c.paths.slice(0,5).map((p,i) => `
-              <div class="step done"><div class="pip">${i+1}</div>
-                <div><p class="mono tiny" style="color:var(--ink-soft);margin:0">${esc(p.text)}</p></div>
-              </div>`).join('')}</div>` : ''}
-        </div></div>`;
-    }, 260);
-  }
-
   function renderLineage(r) {
     const rail = $('#lineage');
     if (!r.ok) {
@@ -785,7 +741,6 @@
       if (e.key === 'Escape') closeSheet();
     });
 
-    $('#compareBtn') && $('#compareBtn').addEventListener('click', runCompare);
     $('#corpusSearch') && $('#corpusSearch').addEventListener('input', e =>
       renderCorpus(e.target.value));
 

@@ -296,3 +296,34 @@ def test_seed_questions_retrieve_something(tenant):
         terms = [t.lower() for t in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", q)]
         assert any(t in postings for t in terms), (
             f"{tenant['slug']} seed question has no indexed terms: {q!r}")
+
+
+# ---------------------------------------------------------------------------
+# Brand assets
+# ---------------------------------------------------------------------------
+
+BRAND = ROOT / "site" / "assets" / "brand"
+
+
+def test_every_tenant_has_both_brand_assets(tenant):
+    """A missing lockup renders as a broken image in the hero.
+
+    This check exists because an earlier repository shipped a brand-asset test
+    that had never once passed — the step producing what it checked was never
+    wired into the build.
+    """
+    slug = tenant["slug"]
+    for kind in ("mark", "lockup"):
+        path = BRAND / f"{slug}-{kind}.png"
+        assert path.exists(), f"missing brand asset: {path.name}"
+        assert path.stat().st_size > 512, f"{path.name} is suspiciously small"
+
+
+def test_brand_assets_are_not_oversized():
+    """Logos are decoration; they must not dominate the payload."""
+    assert BRAND.exists(), "brand asset directory missing"
+    files = sorted(BRAND.glob("*.png"))
+    assert len(files) >= 22, f"expected 22 tenant assets, found {len(files)}"
+    for f in files:
+        kb = f.stat().st_size / 1024
+        assert kb <= 90, f"{f.name} is {kb:.0f} KB, over the 90 KB ceiling"
