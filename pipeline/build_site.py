@@ -596,6 +596,7 @@ def build_demo(m: dict) -> str:
 <script src="{base}assets/vendor/three.min.js"></script>
 <script src="{base}assets/js/galaxy.js"></script>
 <script src="{base}assets/js/engine.js"></script>
+<script src="{base}assets/js/typeahead.js"></script>
 <script src="{base}assets/js/app.js"></script>
 </body></html>
 """
