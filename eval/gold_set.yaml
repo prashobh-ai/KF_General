@@ -1,0 +1,374 @@
+# =============================================================================
+# Retrieval gold set
+# =============================================================================
+#
+# Each case declares what CORRECT EVIDENCE looks like, independent of how an
+# answer is phrased. We grade retrieval rather than generation: if the right
+# passage never surfaces, no amount of answer polish can save the response.
+#
+# Matchers are field and substring tests, never passage ids, so the set stays
+# valid as the corpus is regenerated with a different seed.
+#
+#   text_contains     any listed string appears in the passage text
+#   section_contains  any listed string appears in the section heading
+#   doc.<field>       substring test against the source document's metadata
+#
+# Categories:
+#   lexical    the query uses the corpus's own words — BM25 should win outright
+#   semantic   vocabulary mismatch; the user's words are absent from the corpus,
+#              so only the LSA retriever can bridge them
+#   cross      evidence must come from more than one document type
+#   adversarial  plausible-sounding but genuinely absent — retrieval should be
+#              weak, and the system should decline rather than confabulate
+
+cases:
+
+  # ------------------------------------------------------------------ q-airlines
+  - id: air-lex-01
+    tenant: q-airlines
+    category: lexical
+    question: "What is the repair interval for a Category B MEL item?"
+    relevant_any:
+      - text_contains: ["repair interval", "MEL", "minimum equipment"]
+      - doc.abbrev: "MEL"
+
+  - id: air-lex-02
+    tenant: q-airlines
+    category: lexical
+    question: "dispatch release fuel plan and alternates"
+    relevant_any:
+      - doc.abbrev: "DR"
+      - text_contains: ["dispatch", "fuel", "alternate"]
+
+  - id: air-sem-01
+    tenant: q-airlines
+    category: semantic
+    question: "how do we recover when flights are badly disrupted"
+    notes: "Corpus says 'irregular operations', never 'badly disrupted'."
+    relevant_any:
+      - text_contains: ["irregular operations", "recovery", "IROPS"]
+      - doc.abbrev: "IROPS"
+
+  - id: air-sem-02
+    tenant: q-airlines
+    category: semantic
+    question: "pilot tiredness limits"
+    notes: "Corpus says 'flight duty period' and 'fatigue risk'."
+    relevant_any:
+      - text_contains: ["duty", "fatigue", "rest"]
+      - doc.abbrev: "FDP"
+
+  - id: air-cross-01
+    tenant: q-airlines
+    category: cross
+    question: "de-icing delay coding and ground handling procedure"
+    relevant_any:
+      - text_contains: ["de-icing", "delay"]
+      - doc.abbrev: "GOM"
+
+  # ------------------------------------------------------------------ q-aerotech
+  - id: aer-lex-01
+    tenant: q-aerotech
+    category: lexical
+    question: "Airworthiness Directive compliance recurring inspection interval"
+    relevant_any:
+      - doc.abbrev: "ADCR"
+      - text_contains: ["airworthiness directive", "recurring"]
+
+  - id: aer-lex-02
+    tenant: q-aerotech
+    category: lexical
+    question: "back-to-birth traceability for life limited parts"
+    relevant_any:
+      - doc.abbrev: "LLP"
+      - text_contains: ["back-to-birth", "life limit", "cycles"]
+
+  - id: aer-sem-01
+    tenant: q-aerotech
+    category: semantic
+    question: "who is allowed to sign off that an aircraft can fly again"
+    notes: "Corpus says 'certifying staff' and 'certificate of release to service'."
+    relevant_any:
+      - text_contains: ["certifying", "release to service", "certification"]
+      - doc.abbrev: "CRS"
+
+  - id: aer-sem-02
+    tenant: q-aerotech
+    category: semantic
+    question: "metal deterioration found during structural inspection"
+    notes: "Corpus says 'corrosion' and 'non-routine finding'."
+    relevant_any:
+      - text_contains: ["corrosion", "structur", "non-routine", "finding"]
+
+  - id: aer-adv-01
+    tenant: q-aerotech
+    category: adversarial
+    question: "cabin crew meal allowance policy for long haul rosters"
+    notes: "An MRO corpus contains nothing about crew meal allowances."
+    relevant_any:
+      - text_contains: ["meal allowance"]
+
+  # ------------------------------------------------------------------ q-health
+  - id: hea-lex-01
+    tenant: q-health
+    category: lexical
+    question: "high-alert medication barcode verification before administration"
+    relevant_any:
+      - doc.abbrev: "MAR"
+      - text_contains: ["high-alert", "barcode", "administration"]
+
+  - id: hea-lex-02
+    tenant: q-health
+    category: lexical
+    question: "HL7 FHIR terminology bindings for laboratory observations"
+    relevant_any:
+      - doc.abbrev: "IFC"
+      - text_contains: ["FHIR", "LOINC", "terminology", "HL7"]
+
+  - id: hea-sem-01
+    tenant: q-health
+    category: semantic
+    question: "kidney function testing"
+    notes: "Corpus says 'creatinine' and 'glomerular filtration'."
+    relevant_any:
+      - text_contains: ["creatinine", "renal", "filtration", "2160-0"]
+
+  - id: hea-sem-02
+    tenant: q-health
+    category: semantic
+    question: "stopping patients from falling over in hospital"
+    notes: "Corpus says 'falls risk assessment'."
+    relevant_any:
+      - text_contains: ["falls", "risk assessment"]
+
+  - id: hea-cross-01
+    tenant: q-health
+    category: cross
+    question: "sepsis pathway order sets and coding"
+    relevant_any:
+      - text_contains: ["sepsis", "A41.9", "order set", "pathway"]
+
+  # ------------------------------------------------------------- q-assure-claims
+  - id: clm-lex-01
+    tenant: q-assure-claims
+    category: lexical
+    question: "CARC denial codes and reprocessing rules"
+    relevant_any:
+      - doc.abbrev: "DRS"
+      - text_contains: ["adjustment reason", "denial", "CARC"]
+
+  - id: clm-lex-02
+    tenant: q-assure-claims
+    category: lexical
+    question: "837P loops carrying coordination of benefits"
+    relevant_any:
+      - doc.abbrev: "EDI"
+      - text_contains: ["837", "coordination", "loop", "X12"]
+
+  - id: clm-sem-01
+    tenant: q-assure-claims
+    category: semantic
+    question: "getting approval before an expensive scan"
+    notes: "Corpus says 'prior authorization' and 'advanced imaging'."
+    relevant_any:
+      - text_contains: ["authorization", "imaging", "precert"]
+      - doc.abbrev: "PA"
+
+  - id: clm-sem-02
+    tenant: q-assure-claims
+    category: semantic
+    question: "what a member can do if their claim is turned down"
+    notes: "Corpus says 'appeals and grievances'."
+    relevant_any:
+      - text_contains: ["appeal", "grievance", "reconsideration"]
+      - doc.abbrev: "AGP"
+
+  # ------------------------------------------------------------------ q-pharma
+  - id: phr-lex-01
+    tenant: q-pharma
+    category: lexical
+    question: "Phase II out-of-specification investigation and retest authorisation"
+    relevant_any:
+      - doc.abbrev: "OOS"
+      - text_contains: ["out-of-specification", "retest", "investigation"]
+
+  - id: phr-sem-01
+    tenant: q-pharma
+    category: semantic
+    question: "what happens when something goes wrong on the production line"
+    notes: "Corpus says 'deviation' and 'batch impact'."
+    relevant_any:
+      - text_contains: ["deviation", "batch", "containment"]
+      - doc.abbrev: "DEV"
+
+  - id: phr-sem-02
+    tenant: q-pharma
+    category: semantic
+    question: "proving a fix actually worked"
+    notes: "Corpus says 'effectiveness check'."
+    relevant_any:
+      - text_contains: ["effectiveness", "CAPA", "verification"]
+
+  # ---------------------------------------------------------------- q-devicelab
+  - id: dev-lex-01
+    tenant: q-devicelab
+    category: lexical
+    question: "IEC 62304 software safety classification Class C"
+    relevant_any:
+      - doc.abbrev: "SLC"
+      - text_contains: ["62304", "safety class", "software"]
+
+  - id: dev-sem-01
+    tenant: q-devicelab
+    category: semantic
+    question: "deciding whether we must tell the regulator about a patient injury"
+    notes: "Corpus says 'reportability decision' and 'complaint'."
+    relevant_any:
+      - text_contains: ["reportab", "complaint", "investigation"]
+      - doc.abbrev: "CMP"
+
+  - id: dev-sem-02
+    tenant: q-devicelab
+    category: semantic
+    question: "hazards we accepted because the benefit outweighs them"
+    notes: "Corpus says 'residual risk' and 'benefit-risk'."
+    relevant_any:
+      - text_contains: ["residual risk", "benefit", "ALARP", "risk control"]
+
+  # ------------------------------------------------------------------- q-bank
+  - id: bnk-lex-01
+    tenant: q-bank
+    category: lexical
+    question: "enhanced due diligence triggers for cash intensive business"
+    relevant_any:
+      - doc.abbrev: "AML"
+      - text_contains: ["due diligence", "cash-intensive", "monitoring"]
+
+  - id: bnk-sem-01
+    tenant: q-bank
+    category: semantic
+    question: "someone splitting deposits to stay under the reporting limit"
+    notes: "Corpus says 'structuring' and 'suspicious activity'."
+    relevant_any:
+      - text_contains: ["structuring", "suspicious", "alert", "SAR"]
+
+  - id: bnk-sem-02
+    tenant: q-bank
+    category: semantic
+    question: "checking that our risk calculations are trustworthy"
+    notes: "Corpus says 'model validation' and 'SR 11-7'."
+    relevant_any:
+      - text_contains: ["model", "validation", "11-7"]
+      - doc.abbrev: "MRD"
+
+  # -------------------------------------------------------------- q-assurance
+  - id: asr-lex-01
+    tenant: q-assurance
+    category: lexical
+    question: "performance materiality relative to overall materiality"
+    relevant_any:
+      - doc.abbrev: "MDM"
+      - text_contains: ["materiality", "benchmark", "threshold"]
+
+  - id: asr-sem-01
+    tenant: q-assurance
+    category: semantic
+    question: "second partner checking the work before the opinion goes out"
+    notes: "Corpus says 'engagement quality review'."
+    relevant_any:
+      - text_contains: ["quality review", "concurring", "reviewer"]
+      - doc.abbrev: "EQR"
+
+  - id: asr-sem-02
+    tenant: q-assurance
+    category: semantic
+    question: "when controls do not work as designed"
+    notes: "Corpus says 'exceptions' and 'operating effectiveness'."
+    relevant_any:
+      - text_contains: ["exception", "operating effectiveness", "control"]
+
+  # ------------------------------------------------------------------ q-cruise
+  - id: crz-lex-01
+    tenant: q-cruise
+    category: lexical
+    question: "Port State Control deficiency codes and rectification evidence"
+    relevant_any:
+      - doc.abbrev: "PSC"
+      - text_contains: ["deficiency", "rectification", "port state"]
+
+  - id: crz-sem-01
+    tenant: q-cruise
+    category: semantic
+    question: "stopping a stomach bug spreading among guests"
+    notes: "Corpus says 'outbreak prevention' and 'vessel sanitation'."
+    relevant_any:
+      - text_contains: ["outbreak", "sanitation", "potable", "cleaning"]
+
+  - id: crz-sem-02
+    tenant: q-cruise
+    category: semantic
+    question: "practising what to do in an emergency at sea"
+    notes: "Corpus says 'drill' and 'muster'."
+    relevant_any:
+      - text_contains: ["drill", "muster", "emergency"]
+      - doc.abbrev: "DRL"
+
+  # ------------------------------------------------------------------ q-retail
+  - id: ret-lex-01
+    tenant: q-retail
+    category: lexical
+    question: "carton labelling requirements and chargeback schedule"
+    relevant_any:
+      - doc.abbrev: "VRG"
+      - text_contains: ["label", "chargeback", "routing"]
+
+  - id: ret-sem-01
+    tenant: q-retail
+    category: semantic
+    question: "how much spare stock to hold so we do not run out"
+    notes: "Corpus says 'safety stock' and 'reorder logic'."
+    relevant_any:
+      - text_contains: ["safety stock", "reorder", "replenish"]
+      - doc.abbrev: "RPL"
+
+  - id: ret-sem-02
+    tenant: q-retail
+    category: semantic
+    question: "customer buys online and collects at the shop"
+    notes: "Corpus says 'BOPIS' and 'ready for collection'."
+    relevant_any:
+      - text_contains: ["collection", "fulfil", "store", "omnichannel"]
+
+  # ----------------------------------------------------------------- q-quality
+  - id: qua-lex-01
+    tenant: q-quality
+    category: lexical
+    question: "exit criteria for system test and who can waive them"
+    relevant_any:
+      - text_contains: ["exit criteria", "entry", "suspension"]
+      - doc.abbrev: "TP"
+
+  - id: qua-sem-01
+    tenant: q-quality
+    category: semantic
+    question: "bugs that got through to customers"
+    notes: "Corpus says 'defect escape' and 'containment'."
+    relevant_any:
+      - text_contains: ["escape", "containment", "defect", "leakage"]
+
+  - id: qua-sem-02
+    tenant: q-quality
+    category: semantic
+    question: "making the site usable for people with disabilities"
+    notes: "Corpus says 'accessibility' and 'WCAG conformance'."
+    relevant_any:
+      - text_contains: ["accessibility", "WCAG", "conformance"]
+      - doc.abbrev: "ACA"
+
+  - id: qua-adv-01
+    tenant: q-quality
+    category: adversarial
+    question: "employee parking permit allocation at head office"
+    notes: "Absent from a testing corpus. The system should decline."
+    relevant_any:
+      - text_contains: ["parking permit"]

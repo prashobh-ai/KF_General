@@ -1,0 +1,18 @@
+# Generated corpora and fabric artefacts. The source of truth is pipeline/packs/
+# — everything under tenants/ is reproducible from a seed, so committing it
+# would add megabytes of churn to every diff for no benefit.
+tenants/
+
+# Generated site routes and data. site/assets/ IS committed; nothing else here is.
+site/demo/
+site/data/
+site/index.html
+site/.nojekyll
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+*.egg-info/
