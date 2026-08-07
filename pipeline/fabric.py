@@ -36,6 +36,32 @@ during must-not no nor own same so too very s t
 
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9\-]{1,}")
 
+# Procedural English that appears in every controlled document ever written.
+# These survive stop-word removal because they are content words, but they
+# carry no domain signal — they are what made the concept cloud read as noise.
+GENERIC_TERMS = frozenset("""
+item items work working works completed complete completion performed perform
+against operations operation requirement requirements revision only state
+states permitted current newer cached effective once copy printed calls
+independent verify check checks checked hand also person sequence starting
+verification invalidates prerequisites confirm downstream records recorded
+governs escalated cannot must shall should would could within under over
+following follows applies applied applicable apply section sections document
+documents documented documentation record recording ensure ensures ensuring
+provide provided provides required require requires includes included include
+using used use made make making taken take takes given give gives before
+after during while where when what which whom whose there their they them
+this that these those such same other another each every both either neither
+more most less least many much few several various certain general specific
+appropriate relevant necessary sufficient adequate reasonable
+hours days weeks months annual annually periodic period periodically
+assessed assess assessment beyond held holds holding approx approximately
+reference references referenced referencing basis based stated states
+window windows threshold thresholds interval intervals outcome outcomes
+activity activities item-level named names name detail details
+confirms confirm advances advance carries carry carried
+""".split())
+
 
 def tokenise(text: str) -> list[str]:
     return [t.lower() for t in TOKEN_RE.findall(text)
@@ -404,11 +430,68 @@ def build_insights(pack: Pack, docs: list[dict], graph: dict,
     for d in docs:
         by_month[d["effective"][:7]] += 1
 
-    terms: Counter = Counter()
+    # ---------------------------------------------------------------
+    # Concept extraction.
+    #
+    # Ranking by raw document frequency produced a cloud of "item", "work",
+    # "against", "only", "also" — the connective tissue of procedural English,
+    # which every corpus shares and which therefore says nothing about THIS
+    # one. A concept cloud whose largest word is "item" is worse than no cloud.
+    #
+    # Two changes fix it. First, a domain vocabulary is assembled from the
+    # pack itself — lexicon, unit names, systems, authorities, subjects,
+    # document types and code meanings — and terms in it are strongly
+    # preferred, because those are the words a practitioner would recognise as
+    # belonging to their field. Second, everything else must clear a
+    # distinctiveness bar: present in enough passages to be a real theme, but
+    # not so ubiquitous that it is boilerplate.
+    # ---------------------------------------------------------------
+    domain_vocab: set[str] = set()
+    for phrase in (
+        list(pack.lexicon) + list(pack.units) + list(pack.systems)
+        + list(pack.subjects) + list(pack.sites) + list(pack.roles)
+    ):
+        domain_vocab.update(tokenise(phrase))
+    for d in pack.doc_types:
+        domain_vocab.update(tokenise(d.name))
+        domain_vocab.update(tokenise(d.authority))
+        for sec in d.sections:
+            domain_vocab.update(tokenise(sec))
+    for cs in pack.code_systems:
+        domain_vocab.update(tokenise(cs.name))
+        domain_vocab.update(tokenise(cs.authority))
+        for code, meaning in cs.codes:
+            domain_vocab.update(tokenise(meaning))
+            if any(ch.isdigit() for ch in code) and len(code) > 2:
+                domain_vocab.add(code.lower())
+    for wf in pack.workflows:
+        for st in wf.states:
+            domain_vocab.update(tokenise(st))
+
+    df: Counter = Counter()
     for p in passages:
-        terms.update(set(tokenise(p["text"])))
-    concept = [{"term": t, "n": n} for t, n in terms.most_common(48)
-               if len(t) > 3]
+        df.update(set(tokenise(p["text"])))
+    n_pass = max(1, len(passages))
+
+    scored: list[tuple[float, str, int]] = []
+    for term, n in df.items():
+        if len(term) < 4 or term in GENERIC_TERMS:
+            continue
+        ratio = n / n_pass
+        # Boilerplate: in more than 55% of passages it is scaffolding, not a
+        # theme. Noise: fewer than 3 passages is not a pattern.
+        if ratio > 0.55 or n < 3:
+            continue
+        in_domain = term in domain_vocab
+        if not in_domain and len(term) < 6:
+            continue
+        # Mid-frequency terms are the most characteristic, so weight peaks
+        # away from both the ubiquitous and the rare.
+        salience = n * (1.0 - ratio) * (2.6 if in_domain else 1.0)
+        scored.append((salience, term, n))
+
+    scored.sort(reverse=True)
+    concept = [{"term": t, "n": n} for _sal, t, n in scored[:44]]
 
     kind_counts = Counter(n["kind"] for n in graph["nodes"])
     hubs = sorted(graph["nodes"], key=lambda n: -n["degree"])[:12]

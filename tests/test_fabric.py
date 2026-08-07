@@ -50,6 +50,7 @@ def tenant(request):
         "index": json.loads((root / "fabric" / "index.json").read_text()),
         "documents": json.loads((root / "fabric" / "documents.json").read_text()),
         "health": json.loads((root / "fabric" / "health.json").read_text()),
+        "insights": json.loads((root / "fabric" / "insights.json").read_text()),
         "semantic": json.loads((root / "fabric" / "semantic.json").read_text()),
         "docs_dir": root / "docs",
     }
@@ -303,6 +304,44 @@ def test_seed_questions_retrieve_something(tenant):
 # ---------------------------------------------------------------------------
 
 BRAND = ROOT / "site" / "assets" / "brand"
+
+Q_NAMES = {
+    "q-airlines": "Q-Airlines", "q-aerotech": "Q-Aerotech",
+    "q-health": "Q-Health", "q-assure-claims": "Q-Assure Claims",
+    "q-pharma": "Q-Pharma", "q-devicelab": "Q-DeviceLab",
+    "q-bank": "Q-Bank", "q-assurance": "Q-Assurance",
+    "q-cruise": "Q-Cruise", "q-retail": "Q-Retail",
+    "q-quality": "Q-Quality",
+}
+
+
+def test_tenant_name_matches_its_logo(tenant):
+    """The lockup carries the Q-Domain wordmark, so the tenant name must be it.
+
+    An earlier build gave each tenant an invented trading name alongside its
+    Q-Domain logo, which put two competing identities on the same card.
+    """
+    assert tenant["manifest"]["tenant"] == Q_NAMES[tenant["slug"]]
+
+
+def test_qualizeal_master_assets_present():
+    for name in ("qualizeal-icon.png", "favicon.png"):
+        f = BRAND / name
+        assert f.exists(), f"missing master brand asset: {name}"
+        assert f.stat().st_size > 512
+
+
+def test_concept_cloud_is_domain_specific(tenant):
+    """Ranking concepts by raw frequency surfaced procedural filler — 'item',
+    'work', 'against', 'only'. A cloud whose largest word is 'item' describes
+    English, not the corpus."""
+    from pipeline.fabric import GENERIC_TERMS
+    terms = [c["term"] for c in tenant["insights"]["concepts"]]
+    assert terms, "no concepts extracted"
+    leaked = [t for t in terms if t in GENERIC_TERMS]
+    assert not leaked, f"{tenant['slug']} concept cloud contains filler: {leaked}"
+    assert all(len(t) >= 4 for t in terms), "sub-4-character concepts leaked"
+    assert len(terms) >= 20, f"only {len(terms)} concepts extracted"
 
 
 def test_every_tenant_has_both_brand_assets(tenant):

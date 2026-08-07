@@ -65,7 +65,7 @@ HL7V2_MESSAGES = (
 
 HEALTH = Pack(
     slug="q-health",
-    tenant="Cedarline Health System",
+    tenant="Q-Health",
     industry="Integrated Healthcare Delivery",
     tagline="4 acute sites · 1,180 beds · Level II trauma",
     accent="#31C4B0",
@@ -319,7 +319,7 @@ HEALTH = Pack(
 
 CLAIMS = Pack(
     slug="q-assure-claims",
-    tenant="Provident Benefit Partners",
+    tenant="Q-Assure Claims",
     industry="Health Plan Operations and Claims",
     tagline="2.1M members · commercial, Medicare Advantage, ASO",
     accent="#6D5BD0",
@@ -593,7 +593,7 @@ CLAIMS = Pack(
 
 PHARMA = Pack(
     slug="q-pharma",
-    tenant="Verenda Therapeutics",
+    tenant="Q-Pharma",
     industry="Pharmaceutical Development and Manufacturing",
     tagline="Clinical stage to commercial · GMP sterile fill-finish",
     accent="#16A34A",
@@ -880,7 +880,7 @@ PHARMA = Pack(
 
 DEVICELAB = Pack(
     slug="q-devicelab",
-    tenant="Arclight Medical Devices",
+    tenant="Q-DeviceLab",
     industry="Medical Device Design and Manufacture",
     tagline="Class II and III · ISO 13485 · EU MDR",
     accent="#C2740A",

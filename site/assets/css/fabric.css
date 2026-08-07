@@ -12,11 +12,12 @@
 
 :root {
   /* Brand */
-  --qz-blue: #0B66E1;
-  --qz-blue-lift: #0952BC;
-  --qz-sky: #00A3F4;
-  --qz-red: #FF3300;
-  --qz-red-warm: #FF5004;
+  --qz-blue: #0096FF;          /* sampled from the deck logo */
+  --qz-blue-deep: #0072C6;
+  --qz-blue-lift: #0072C6;
+  --qz-sky: #38B6FF;
+  --qz-red: #F53E5A;           /* sampled from the deck logo */
+  --qz-red-warm: #FF6B7F;
   --qz-navy: #1F2A3D;
   --qz-mist: #CBDDF9;
   --qz-frost: #DAEAFE;
@@ -59,14 +60,12 @@
   --shadow-deep: 0 24px 60px rgba(31, 42, 61, .14), 0 2px 8px rgba(31, 42, 61, .06);
   --glow-blue: 0 0 0 3px rgba(11, 102, 225, .14);
 
-  --qz-watermark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><circle cx='19' cy='19' r='12.5' stroke='%231F2A3D' stroke-width='5' fill='none'/><path d='M8 33 C16 31, 26 22, 34 7' stroke='%23FF3300' stroke-width='4.4' stroke-linecap='round' fill='none'/><path d='M34 7 L33 15 L27.5 10.5 Z' fill='%23FF3300'/></svg>");
-
   --ease: cubic-bezier(.22, .61, .36, 1);
   --ease-out: cubic-bezier(.16, 1, .3, 1);
   --spring: cubic-bezier(.34, 1.56, .64, 1);
 
   --accent: var(--qz-blue);
-  --accent-rgb: 11, 102, 225;
+  --accent-rgb: 0, 150, 255;
 }
 
 /* ========================================================================== */
@@ -95,10 +94,10 @@ body {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1100px 620px at 8% -10%, rgba(11, 102, 225, .10), transparent 60%),
-    radial-gradient(880px 560px at 92% 2%, rgba(0, 163, 244, .08), transparent 58%),
-    radial-gradient(900px 700px at 50% 110%, rgba(255, 51, 0, .05), transparent 56%),
-    linear-gradient(180deg, #FFFFFF 0%, var(--qz-paper) 46%, #FFFFFF 100%);
+    radial-gradient(1200px 680px at 6% -12%, rgba(0, 150, 255, .16), transparent 62%),
+    radial-gradient(900px 580px at 94% 4%, rgba(56, 182, 255, .12), transparent 58%),
+    radial-gradient(880px 660px at 52% 112%, rgba(245, 62, 90, .06), transparent 56%),
+    linear-gradient(160deg, #FFFFFF 0%, #EFF7FF 38%, #E4F1FE 68%, #F7FBFF 100%);
 }
 
 /* Masked grid, barely there — enough to give the white ground a sense of
@@ -118,17 +117,19 @@ body {
 /* The QualiZeal mark as a fixed page watermark. Held at very low opacity and
    pinned off-centre so it reads as letterhead rather than as content — a
    logo large enough to notice is a logo competing with the interface. */
+/* The QualiZeal mark, held large at the right edge exactly as the deck's title
+   slide holds it. Low enough opacity to read as letterhead; a watermark you
+   have to look past is a watermark competing with the interface. */
 .field::after {
   content: "";
   position: absolute;
-  right: -12vw;
+  right: -14vw;
   top: 50%;
   transform: translateY(-50%);
-  width: 78vh;
-  height: 78vh;
-  background: var(--qz-watermark) center / contain no-repeat;
-  opacity: .05;
-  filter: saturate(.85);
+  width: 82vh;
+  height: 82vh;
+  background: url("../brand/qualizeal-icon.png") center / contain no-repeat;
+  opacity: .07;
 }
 
 .field .drift {
@@ -227,7 +228,16 @@ section { padding: clamp(4.5rem, 9vh, 8rem) 0; }
 }
 .brand { display: flex; align-items: center; gap: .7rem; font-family: var(--f-display); font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
 .brand svg { display: block; }
-.brand .sub { font-family: var(--f-mono); font-size: .6rem; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
+.brand-text { display: flex; flex-direction: column; gap: .12rem; }
+/* The deck sets QUALI in navy and ZEAL in brand blue. Reproducing that split
+   rather than setting the whole wordmark in one colour. */
+.brand-wordmark {
+  font-family: var(--f-display); font-weight: 800;
+  letter-spacing: .04em; font-size: 1.06rem;
+  color: var(--qz-navy); line-height: 1;
+}
+.brand-wordmark em { font-style: normal; color: var(--qz-blue); }
+.brand .sub { font-family: var(--f-mono); font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 
 .navlinks { display: flex; gap: .3rem; margin-left: auto; align-items: center; }
 .navlinks a {

@@ -4,7 +4,7 @@ from .base import CodeSystem, DocType, Pack, Workflow
 
 BANK = Pack(
     slug="q-bank",
-    tenant="Ridgeport Financial Group",
+    tenant="Q-Bank",
     industry="Retail and Commercial Banking",
     tagline="$84B assets · 340 branches · commercial lending",
     accent="#1E3A5F",
@@ -291,7 +291,7 @@ BANK = Pack(
 
 ASSURANCE = Pack(
     slug="q-assurance",
-    tenant="Thornbury Assurance LLP",
+    tenant="Q-Assurance",
     industry="External Audit and Assurance",
     tagline="Registered public accounting firm · 240 engagements",
     accent="#667085",
@@ -594,7 +594,7 @@ ASSURANCE = Pack(
 
 CRUISE = Pack(
     slug="q-cruise",
-    tenant="Meridian Ocean Lines",
+    tenant="Q-Cruise",
     industry="Cruise Line Marine and Hotel Operations",
     tagline="9 vessels · 24,000 lower berths · global deployment",
     accent="#0EA5E9",
@@ -883,7 +883,7 @@ CRUISE = Pack(
 
 RETAIL = Pack(
     slug="q-retail",
-    tenant="Harbourfield Retail Group",
+    tenant="Q-Retail",
     industry="Omnichannel Retail and Supply Chain",
     tagline="620 stores · 4 distribution centres · direct import",
     accent="#FF5004",
@@ -1172,7 +1172,7 @@ RETAIL = Pack(
 
 QUALITY = Pack(
     slug="q-quality",
-    tenant="Axiom Quality Engineering",
+    tenant="Q-Quality",
     industry="Quality Engineering and Software Testing",
     tagline="Test centre of excellence · automation · performance · security",
     accent="#6D5BD0",

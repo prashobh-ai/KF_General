@@ -27,11 +27,10 @@ python -m http.server -d site 8000   # http://localhost:8000
 | Relationships | ~11,000 |
 | Per-demo payload | ~1.6 MB |
 
-Routes are `/demo/<slug>/`. Each tenant is a fictional company —
-Northmark Air, Halcyon Aerotech, Cedarline Health System, Provident Benefit
-Partners, Verenda Therapeutics, Arclight Medical Devices, Ridgeport Financial
-Group, Thornbury Assurance LLP, Meridian Ocean Lines, Harbourfield Retail
-Group, Axiom Quality Engineering.
+Routes are `/demo/<slug>/`. Each tenant is a fictional QualiZeal demonstration
+brand — **Q-Airlines, Q-Aerotech, Q-Health, Q-Assure Claims, Q-Pharma,
+Q-DeviceLab, Q-Bank, Q-Assurance, Q-Cruise, Q-Retail, Q-Quality** — each with
+its own lockup in `site/assets/brand/`.
 
 ## Synthetic content, real scaffolding
 
@@ -129,6 +128,18 @@ spread. Geometric because the signals are conjunctive: an answer with excellent
 retrieval but zero query coverage is not average, it is wrong, and an arithmetic
 mean would hide that.
 
+### Concept extraction
+
+Ranking concepts by document frequency produced a cloud of *item, work,
+against, only, also* — the connective tissue of procedural English, which every
+corpus shares and which therefore says nothing about any of them. Terms are now
+scored against a domain vocabulary assembled from the pack itself (lexicon,
+units, systems, authorities, subjects, document types, code meanings, workflow
+states), with everything else required to clear a distinctiveness bar: present
+in at least three passages, absent from more than 45%. `q-aerotech` now surfaces
+*keelson, ispec, part-145, airworthiness, certifying, disposition, effectivity,
+nacelle, calibration* — words a practitioner would recognise as their own.
+
 ### The graph, and why it is not a facet index
 
 A graph derived only from document metadata is a facet index with edges drawn
@@ -183,15 +194,26 @@ and reversed the sign.
 
 ## Visual design
 
-White ground, following the QualiZeal deck: primary blue `#0B66E1`, signal red
-`#FF3300` used sparingly as the one moment of heat, navy ink `#1F2A3D`, frost
-tints. The QualiZeal mark sits as a fixed page watermark at 5% opacity — a
-watermark large enough to notice is a watermark competing with the interface.
+White ground, following the QualiZeal delivery deck. Brand colours are sampled
+directly from the logo embedded in that deck rather than eyeballed from
+compressed slide fills:
 
-Each tenant carries its own **Q-Domain** lockup (`site/assets/brand/`), leading
-the card on the landing page and the hero on its demonstration. The lockups
-already carry the wordmark, so the trading name sits beneath as secondary
-information rather than competing with it.
+| | |
+|---|---|
+| Brand blue | `#0096FF` |
+| Brand coral | `#F53E5A` |
+| Navy ink | `#1F2A3D` |
+
+The QualiZeal mark itself (`site/assets/brand/qualizeal-icon.png`) is extracted
+from `ppt/media` in the deck — an earlier build approximated it in hand-drawn
+SVG and had both the ring geometry and both colours wrong. It appears in the
+header beside the `QUALI`/`ZEAL` split wordmark, and again held large and
+translucent at the right edge as a page watermark, exactly as the deck's title
+slide holds it.
+
+Each tenant leads with its own **Q-Domain** lockup, and the tenant name *is*
+the Q-Domain name. Pairing a Q-Airlines logo with an invented trading name put
+two competing identities on one card.
 
 ### Graph activation
 

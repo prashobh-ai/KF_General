@@ -92,7 +92,7 @@ IATA_DELAY_CODES = (
 
 AIRLINES = Pack(
     slug="q-airlines",
-    tenant="Northmark Air",
+    tenant="Q-Airlines",
     industry="Commercial Airline Operations",
     tagline="Network carrier · 214 aircraft · 68 stations",
     accent="#0B66E1",
@@ -366,7 +366,7 @@ AIRLINES = Pack(
 
 AEROTECH = Pack(
     slug="q-aerotech",
-    tenant="Halcyon Aerotech",
+    tenant="Q-Aerotech",
     industry="Aerospace MRO — Part-145",
     tagline="Base and line maintenance · CAMO · component shops",
     accent="#00A3F4",

@@ -39,22 +39,13 @@ FONTS = (
 # The QualiZeal mark, rebuilt as inline SVG: the blue ring with the red
 # ascending stroke through it. Inline so it renders before any network round
 # trip and inherits currentColor in the dark theme.
-LOGO = """
-<svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-  <defs>
-    <linearGradient id="qzB" x1="4" y1="4" x2="34" y2="34">
-      <stop offset="0%" stop-color="#3B88F0"/><stop offset="100%" stop-color="#0B4FB0"/>
-    </linearGradient>
-    <linearGradient id="qzR" x1="10" y1="32" x2="34" y2="8">
-      <stop offset="0%" stop-color="#FF5004"/><stop offset="100%" stop-color="#FF3300"/>
-    </linearGradient>
-  </defs>
-  <circle cx="19" cy="19" r="12.5" stroke="url(#qzB)" stroke-width="5" fill="none"/>
-  <path d="M8 33 C16 31, 26 22, 34 7" stroke="url(#qzR)" stroke-width="4.4"
-        stroke-linecap="round" fill="none"/>
-  <path d="M34 7 L33 15 L27.5 10.5 Z" fill="#FF3300"/>
-</svg>
-"""
+# The authentic QualiZeal mark, extracted from ppt/media in the delivery deck
+# rather than approximated in SVG. The hand-drawn version had the wrong ring
+# geometry and both brand colours wrong.
+def logo(base: str = "", size: int = 30) -> str:
+    return (f'<img src="{base}assets/brand/qualizeal-icon.png" alt="QualiZeal" '
+            f'height="{size}" width="{size}" decoding="async">')
+
 
 FIELD = ('<div class="field"><span class="drift a"></span>'
          '<span class="drift b"></span><span class="drift c"></span></div>')
@@ -91,8 +82,11 @@ def topbar(base: str, links: list[tuple[str, str]], active: str = "") -> str:
 <header class="topbar">
   <div class="wrap topbar-in">
     <a class="brand" href="{base}index.html">
-      {LOGO}
-      <span>Knowledge Fabric<br><span class="sub">QualiZeal AI CoE</span></span>
+      {logo(base, 32)}
+      <span class="brand-text">
+        <span class="brand-wordmark">QUALI<em>ZEAL</em></span>
+        <span class="sub">Knowledge Fabric · AI Center of Excellence</span>
+      </span>
     </a>
     <nav class="navlinks">{nav}</nav>
   </div>
@@ -100,13 +94,13 @@ def topbar(base: str, links: list[tuple[str, str]], active: str = "") -> str:
 """
 
 
-FOOTER = """
+FOOTER_TPL = """
 <footer>
   <div class="wrap">
     <div class="row between" style="align-items:flex-start;gap:2rem">
       <div>
         <div class="row" style="gap:.6rem;margin-bottom:.6rem">%LOGO%
-          <strong style="font-family:var(--f-display)">Knowledge Fabric</strong></div>
+          <strong class="brand-wordmark" style="font-size:1rem">QUALI<em>ZEAL</em></strong></div>
         <p class="note">Every tenant, document, person and identifier in this
         demonstration is fictional. Standards, code systems and regulations are
         cited as public reference. Identifiers are drawn from ranges reserved
@@ -120,7 +114,7 @@ FOOTER = """
   </div>
 </footer>
 </body></html>
-""".replace("%LOGO%", LOGO)
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +297,7 @@ def build_index(registry: dict) -> str:
   </section>
 
 </main>
-{FOOTER.replace('</body></html>', '')}
+{FOOTER_TPL.replace('%LOGO%', logo('', 24)).replace('</body></html>', '')}
 <script src="assets/vendor/three.min.js"></script>
 <script src="assets/js/galaxy.js"></script>
 <script>
@@ -584,7 +578,7 @@ def build_demo(m: dict) -> str:
   </div>
 </div>
 
-{FOOTER.replace('</body></html>', '')}
+{FOOTER_TPL.replace('%LOGO%', logo(base, 24)).replace('</body></html>', '')}
 <script src="{base}assets/vendor/three.min.js"></script>
 <script src="{base}assets/js/galaxy.js"></script>
 <script src="{base}assets/js/engine.js"></script>

@@ -308,7 +308,7 @@
       lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
       lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
       this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, opacity: 0.34,
+        vertexColors: true, transparent: true, opacity: 0.14,
         depthWrite: false, blending: THREE.NormalBlending
       }));
       this.root.add(this.lines);
@@ -410,7 +410,7 @@
         // than a spray of highlighted dots.
         let cs, ct;
         if (!anyActive) {
-          cs = ct = [0.72, 0.78, 0.88];
+          cs = ct = [0.58, 0.72, 0.90];
         } else {
           // An edge touching an activated node is drawn red: requiring BOTH
           // ends to be active made almost no edge qualify, so the lit nodes
@@ -464,7 +464,7 @@
           n.tier = 0; n.target = 0;    n.tAlpha = 0.14; n.tSize = 0.30;
         }
       });
-      if (this.lines) this.lines.material.opacity = 0.20;
+      if (this.lines) this.lines.material.opacity = 0.26;
       // A pulse of heat re-energises the layout so lit nodes visibly settle
       // into a new arrangement — motion confirms the answer changed something.
       this.alpha = Math.max(this.alpha, 0.35);
@@ -533,7 +533,7 @@
       this.nodes.forEach(n => {
         n.tier = 0; n.target = 0; n.tAlpha = 1; n.tSize = 1;
       });
-      if (this.lines) this.lines.material.opacity = 0.34;
+      if (this.lines) this.lines.material.opacity = 0.14;
     }
 
     toggleKind(kind) {
