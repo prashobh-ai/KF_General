@@ -1,2 +1,7 @@
 -r pipeline/requirements.txt
 pytest>=8.0
+# Drives tests/test_graph_ui.py. The graph's activation behaviour — camera
+# reframing, per-edge alpha, node tiers — is invisible from the DOM and only
+# observable in a real browser against the live WebGL scene. Those defects
+# shipped once already precisely because nothing exercised them.
+playwright>=1.44
