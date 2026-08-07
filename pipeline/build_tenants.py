@@ -25,6 +25,7 @@ from pathlib import Path
 from . import packs as packlib
 from .docgen import DocumentBuilder
 from .fabric import BM25, build_graph, build_health, build_insights, extract_passages
+from .clusters import build_dendrogram
 from .semantic import build_semantic_index
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -77,7 +78,7 @@ def build_tenant(pack, docs_target: int) -> dict:
 
     passages = [p for d in docs for p in extract_passages(d)]
     graph = build_graph(pack, docs, builder.world, builder.world_rels)
-    health = build_health(docs, graph)
+    health = build_health(docs, graph, passages)
     insights = build_insights(pack, docs, graph, passages)
     bm25 = BM25(passages)
 
@@ -92,6 +93,10 @@ def build_tenant(pack, docs_target: int) -> dict:
     # the corpus's.
     sem = build_semantic_index([p["text"] for p in passages])
     write_json(fabric / "semantic.json", sem)
+
+    # Hierarchical clustering: how the corpus organises itself, independent of
+    # the taxonomy it was filed under.
+    write_json(fabric / "dendrogram.json", build_dendrogram(docs, passages))
 
     write_json(fabric / "index.json", {
         "passages": [{k: v for k, v in p.items()} for p in passages],

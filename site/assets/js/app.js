@@ -48,7 +48,7 @@
 
   async function boot() {
     const root = `${BASE}data/${SLUG}`;
-    const [manifest, graph, index, documents, health, insights, semantic] = await Promise.all([
+    const [manifest, graph, index, documents, health, insights, semantic, dendrogram] = await Promise.all([
       fetch(`${root}/tenant.json`).then(r => r.json()),
       fetch(`${root}/graph.json`).then(r => r.json()),
       fetch(`${root}/index.json`).then(r => r.json()),
@@ -58,10 +58,11 @@
       // The semantic index is the largest single payload. Failing soft here
       // means vocabulary-mismatch queries degrade to BM25 rather than the
       // whole page dying.
-      fetch(`${root}/semantic.json`).then(r => r.json()).catch(() => ({ enabled: false }))
+      fetch(`${root}/semantic.json`).then(r => r.json()).catch(() => ({ enabled: false })),
+      fetch(`${root}/dendrogram.json`).then(r => r.json()).catch(() => ({ enabled: false }))
     ]);
 
-    bundle = { manifest, graph, index, documents, health, insights, semantic };
+    bundle = { manifest, graph, index, documents, health, insights, semantic, dendrogram };
     engine = new Engine(bundle);
 
     document.documentElement.style.setProperty('--accent', manifest.accent);
@@ -72,6 +73,7 @@
     renderSuggestions();
     renderHealth();
     renderInsights();
+    renderDendrogram();
     renderCorpus();
     observeRises();
 
@@ -93,7 +95,7 @@
 
     const tip = $('#tip');
     galaxy = new Galaxy(canvas, {
-      maxNodes: window.innerWidth < 760 ? 260 : 460,
+      maxNodes: window.innerWidth < 760 ? 150 : 300,
       onHover(node, ev) {
         if (!node) { tip.classList.remove('on'); return; }
         tip.innerHTML =
@@ -388,64 +390,196 @@
   // Health
   // ---------------------------------------------------------------------------
 
+  /* ---------------------------------------------------------------------------
+     Knowledge health.
+
+     Five concentric arcs rather than one ring and five bars. A ring plus bars
+     reads as a form; nested arcs read as a single finding, comparable at a
+     glance from across a room — which is the actual viewing condition on a
+     screen share. Outermost is the broadest measure, innermost the most
+     specific, each drawing in on a stagger so the composition assembles.
+
+     Cards flip on click to show the formula and the raw inputs. A score with
+     no derivation is a number someone has to take on trust, and the first
+     question a technical reviewer asks is how it was calculated.
+     --------------------------------------------------------------------------- */
+
+  const RING_COLOURS = {
+    depth:         ['#0096FF', '#7FD8FF'],
+    connectedness: ['#6D5BD0', '#B388FF'],
+    traceability:  ['#F6B44C', '#FFD98A'],
+    readability:   ['#F53E5A', '#FF9AAB'],
+    currency:      ['#16A34A', '#7FE3B0'],
+  };
+
+  const SWEEP = 270, START = 135;
+
+  function polar(cx, cy, r, deg) {
+    const a = deg * Math.PI / 180;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  }
+
+  function arcPath(cx, cy, r, start, sweep) {
+    const [ax, ay] = polar(cx, cy, r, start);
+    const [bx, by] = polar(cx, cy, r, start + sweep);
+    return `M ${ax.toFixed(2)} ${ay.toFixed(2)} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${bx.toFixed(2)} ${by.toFixed(2)}`;
+  }
+
+  function renderRings(metrics, overall) {
+    const SIZE = 300, cx = SIZE / 2, cy = SIZE / 2;
+    const OUTER = 132, STEP = 19, W = 12;
+
+    const rings = metrics.map((m, i) => {
+      const r = OUTER - i * STEP;
+      const pct = Math.max(0, Math.min(100, m.value)) / 100;
+      const len = 2 * Math.PI * r * (SWEEP / 360);
+      const [from, to] = RING_COLOURS[m.key] || ['#0096FF', '#7FD8FF'];
+      return { m, r, pct, len, from, to, i };
+    });
+
+    return `
+      <svg viewBox="0 0 ${SIZE} ${SIZE}" class="rings" role="img"
+           aria-label="Knowledge health, five measures">
+        <defs>
+          ${rings.map(r => `
+            <linearGradient id="rg-${r.m.key}" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="${r.from}"/>
+              <stop offset="100%" stop-color="${r.to}"/>
+            </linearGradient>`).join('')}
+        </defs>
+        ${rings.map(r => `
+          <path class="ring-track" d="${arcPath(cx, cy, r.r, START, SWEEP)}"
+                stroke-width="${W}"/>`).join('')}
+        ${rings.map(r => `
+          <path class="ring-arc" data-ring="${r.m.key}"
+                d="${arcPath(cx, cy, r.r, START, SWEEP)}"
+                stroke="url(#rg-${r.m.key})" stroke-width="${W}"
+                stroke-dasharray="${r.len.toFixed(1)}"
+                stroke-dashoffset="${r.len.toFixed(1)}"
+                style="--len:${r.len.toFixed(1)};--off:${(r.len * (1 - r.pct)).toFixed(1)};--delay:${260 + r.i * 130}ms">
+            <title>${esc(r.m.label)}: ${r.m.value} out of 100</title>
+          </path>`).join('')}
+        ${rings.map(r => {
+          const [x, y] = polar(cx, cy, r.r, START + SWEEP * r.pct);
+          return `<circle class="ring-cap" data-ring="${r.m.key}"
+                          cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="3.4"
+                          fill="${r.to}"
+                          style="--delay:${420 + r.i * 130}ms"/>`;
+        }).join('')}
+        <text x="${cx}" y="${cy - 4}" text-anchor="middle" class="rings-n">${overall}</text>
+        <text x="${cx}" y="${cy + 16}" text-anchor="middle" class="rings-l">READINESS</text>
+      </svg>`;
+  }
+
+  function kvRows(obj) {
+    return Object.entries(obj).map(([k, v]) => {
+      const val = (v && typeof v === 'object') ? Object.entries(v)
+        .map(([a, b]) => `${a} ${b}`).join(', ') : v;
+      const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+      return `<div class="kv"><span>${esc(label)}</span><b>${esc(val)}</b></div>`;
+    }).join('');
+  }
+
   function renderHealth() {
     const h = bundle.health;
-    const ring = $('#healthRing');
-    const R = 62, C = 2 * Math.PI * R;
-    ring.innerHTML = `
-      <svg width="160" height="160" viewBox="0 0 160 160">
-        <defs>
-          <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="var(--qz-blue)"/>
-            <stop offset="60%" stop-color="var(--qz-sky)"/>
-            <stop offset="100%" stop-color="var(--qz-teal)"/>
-          </linearGradient>
-        </defs>
-        <circle class="track" cx="80" cy="80" r="${R}" stroke-width="11"/>
-        <circle class="val" cx="80" cy="80" r="${R}" stroke-width="11"
-                stroke-dasharray="${C}" stroke-dashoffset="${C}"/>
-      </svg>
-      <div class="mid"><b>${h.overall}</b><span>Readiness</span></div>`;
-    const val = $('.val', ring);
-    io.observe(ring);
-    const start = new IntersectionObserver(es => {
-      es.forEach(e => {
-        if (e.isIntersecting) {
-          val.style.strokeDashoffset = C * (1 - h.overall / 100);
-          start.unobserve(e.target);
-        }
-      });
-    }, { threshold: 0.4 });
-    start.observe(ring);
+    if (!h || !h.metrics) return;
 
-    $('#healthDims').innerHTML = h.dimensions.map(d => {
-      const band = d.score >= 80 ? 'good' : d.score >= 55 ? '' : 'warm';
-      return `
-      <div class="card tilt rise">
-        <div class="sheen"></div>
-        <div class="card-pad">
-          <div class="row between">
-            <h3>${esc(d.name)}</h3>
-            <span class="mono" style="color:var(--ink)">${d.score}</span>
+    $('#healthRing').innerHTML = renderRings(h.metrics, h.overall);
+
+    $('#healthSummary').innerHTML = `
+      <p class="small" style="margin:0 0 .5rem;color:var(--ink)">${esc(h.strongest || '')}</p>
+      <p class="small" style="margin:0;color:var(--qz-red)">${esc(h.weakest || '')}</p>`;
+
+    $('#healthDims').innerHTML = h.metrics.map(m => `
+      <div class="flip" data-ring="${m.key}" tabindex="0" role="button"
+           aria-label="${esc(m.label)}, ${m.value} out of 100. Activate to see how this is calculated.">
+        <div class="flip-in">
+          <div class="flip-face card">
+            <div class="card-pad">
+              <div class="row between">
+                <h3 style="font-size:1rem">${esc(m.label)}</h3>
+                <span class="metric-n" style="color:${(RING_COLOURS[m.key] || [])[0]}">${m.value}</span>
+              </div>
+              <div class="meter" style="margin:.9rem 0">
+                <i data-w="${m.value}" style="width:0;background:linear-gradient(90deg, ${(RING_COLOURS[m.key] || ['#0096FF','#7FD8FF'])[0]}, ${(RING_COLOURS[m.key] || ['#0096FF','#7FD8FF'])[1]})"></i>
+              </div>
+              <p class="small" style="margin:0 0 .5rem">${esc(m.what)}</p>
+              <p class="tiny muted" style="margin:0"><b>Why it matters:</b> ${esc(m.risk)}</p>
+              <span class="flip-hint">How is this calculated? &rarr;</span>
+            </div>
           </div>
-          <div class="meter ${band}" style="margin:.9rem 0"><i data-w="${d.score}"></i></div>
-          <p class="small">${esc(d.detail)}</p>
-          <p class="small muted" style="margin:0">${esc(d.action)}</p>
-          ${d.items.length ? `<div class="cloud tiny" style="margin-top:.9rem">
-              ${d.items.slice(0, 6).map(x => `<span class="mono">${esc(x)}</span>`).join('')}
-            </div>` : ''}
+          <div class="flip-face flip-back card">
+            <div class="card-pad">
+              <div class="eyebrow" style="margin-bottom:.7rem">${esc(m.label)} — derivation</div>
+              <code class="formula">${esc(m.formula)}</code>
+              <div class="kvs">${kvRows(m.inputs)}</div>
+              <p class="tiny muted" style="margin:.9rem 0 0">${esc(m.note)}</p>
+              <span class="flip-hint">&larr; Back</span>
+            </div>
+          </div>
         </div>
-      </div>`;
-    }).join('');
+      </div>`).join('');
 
-    bindTilt($('#healthDims'));
-    const mo = new IntersectionObserver(es => es.forEach(e => {
-      if (e.isIntersecting) {
-        $$('i[data-w]', e.target).forEach(i => { i.style.width = i.dataset.w + '%'; });
-        mo.unobserve(e.target);
-      }
-    }), { threshold: 0.3 });
-    mo.observe($('#healthDims'));
+    $('#healthRisks').innerHTML = h.risks.map(r => `
+      <div class="flip risk" tabindex="0" role="button"
+           aria-label="${esc(r.label)}, ${esc(String(r.value))}. Activate to see how this is counted.">
+        <div class="flip-in">
+          <div class="flip-face card">
+            <div class="card-pad">
+              <div class="row between">
+                <h3 style="font-size:.95rem">${esc(r.label)}</h3>
+                <span class="metric-n" style="color:var(--qz-red)">${esc(String(r.value))}</span>
+              </div>
+              <p class="small" style="margin:.7rem 0 0">${esc(r.why)}</p>
+              <span class="flip-hint">How is this counted? &rarr;</span>
+            </div>
+          </div>
+          <div class="flip-face flip-back card">
+            <div class="card-pad">
+              <div class="eyebrow" style="margin-bottom:.7rem">How this is counted</div>
+              <p class="small" style="margin:0 0 .8rem;color:var(--ink)">${esc(r.detail)}</p>
+              <code class="formula">${esc(r.how)}</code>
+              ${r.breakdown ? `<div class="kvs">${kvRows(r.breakdown)}</div>` : ''}
+              ${r.items && r.items.length ? `<div class="cloud tiny" style="margin-top:.8rem">
+                 ${r.items.slice(0, 6).map(x => `<span class="mono">${esc(x)}</span>`).join('')}
+               </div>` : ''}
+              <span class="flip-hint">&larr; Back</span>
+            </div>
+          </div>
+        </div>
+      </div>`).join('');
+
+    // Flip on click or keyboard; the card is a button, so it must behave like one.
+    $$('.flip').forEach(el => {
+      const toggle = () => el.classList.toggle('flipped');
+      el.addEventListener('click', toggle);
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    });
+
+    // Hovering a metric card isolates its arc, tying the two views together.
+    $$('#healthDims .flip').forEach(el => {
+      const key = el.dataset.ring;
+      el.addEventListener('pointerenter', () => {
+        $$('.ring-arc, .ring-cap').forEach(a =>
+          a.classList.toggle('dim', a.dataset.ring !== key));
+      });
+      el.addEventListener('pointerleave', () => {
+        $$('.ring-arc, .ring-cap').forEach(a => a.classList.remove('dim'));
+      });
+    });
+
+    // Draw the arcs when the section scrolls into view, not on load — the
+    // animation is the point, and it is wasted if it plays off-screen.
+    const io2 = new IntersectionObserver(es => es.forEach(e => {
+      if (!e.isIntersecting) return;
+      $$('.ring-arc', e.target).forEach(a => { a.style.strokeDashoffset = 'var(--off)'; });
+      $$('.ring-cap', e.target).forEach(c => c.classList.add('in'));
+      $$('#healthDims i[data-w]').forEach(i => { i.style.width = i.dataset.w + '%'; });
+      io2.unobserve(e.target);
+    }), { threshold: 0.25 });
+    io2.observe($('#health'));
   }
 
   // ---------------------------------------------------------------------------
@@ -515,6 +649,130 @@
       }
     }), { threshold: 0.15 });
     $$('#insights .panel').forEach(p => mo.observe(p));
+  }
+
+  /* ---------------------------------------------------------------------------
+     Circular dendrogram.
+
+     Every other insights panel answers "how much of X is there". This one
+     answers "how does the corpus organise itself" — documents are clustered in
+     concept space, so two land on the same branch because they discuss the
+     same things, not because they were filed together. Branches that span
+     several owning units are the interesting ones: the same subject documented
+     independently in more than one place.
+
+     Radial, because the meaningful structure is the top-level split near the
+     centre, and a circle gives every leaf equal room on the rim.
+     --------------------------------------------------------------------------- */
+  const CLUSTER_HUES = [206, 12, 168, 268, 32, 190, 330, 96, 250];
+
+  function clusterColour(c, l) {
+    const h = CLUSTER_HUES[(c || 0) % CLUSTER_HUES.length];
+    return `hsl(${h} 78% ${l || 52}%)`;
+  }
+
+  function renderDendrogram() {
+    const box = $('#insDendro');
+    if (!box) return;
+    const d = bundle.dendrogram;
+    if (!d || !d.enabled) {
+      box.innerHTML = '<p class="muted small">Not enough documents to cluster.</p>';
+      return;
+    }
+
+    const SIZE = 720, R = 268, CX = SIZE / 2, CY = SIZE / 2;
+
+    // Collect leaves in traversal order; their index sets the angle.
+    const leaves = [];
+    (function walk(n) {
+      if (n.leaf) { leaves.push(n); return; }
+      n.children.forEach(walk);
+    })(d.tree);
+    const N = leaves.length || 1;
+
+    // Assign polar coordinates: leaves on the rim, internal nodes at a radius
+    // proportional to merge height, angled at the mean of their children.
+    let maxH = 0;
+    (function h(n) { maxH = Math.max(maxH, n.height || 0); if (!n.leaf) n.children.forEach(h); })(d.tree);
+
+    let li = 0;
+    (function place(n) {
+      if (n.leaf) {
+        n._a = (li++ + 0.5) / N * Math.PI * 2 - Math.PI / 2;
+        n._r = R;
+        return;
+      }
+      n.children.forEach(place);
+      const as = n.children.map(c => c._a);
+      n._a = as.reduce((x, y) => x + y, 0) / as.length;
+      // Height maps inward: an early merge (similar documents) sits far out,
+      // a late merge (joining unlike groups) sits near the centre.
+      n._r = R * (1 - Math.min(1, (n.height || 0) / (maxH || 1)) * 0.92);
+    })(d.tree);
+
+    const pol = (r, a) => [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+
+    // Elbow links: radial segment then an arc, which is what makes a radial
+    // dendrogram legible as a tree rather than a starburst of straight lines.
+    const paths = [];
+    (function link(n) {
+      if (n.leaf) return;
+      for (const c of n.children) {
+        const [x1, y1] = pol(n._r, c._a);
+        const [x2, y2] = pol(c._r, c._a);
+        const [ax, ay] = pol(n._r, n._a);
+        const sweep = ((c._a - n._a) + Math.PI * 2) % (Math.PI * 2) > Math.PI ? 0 : 1;
+        const cl = c.cluster || n.cluster || 0;
+        paths.push(
+          `<path d="M${ax.toFixed(1)} ${ay.toFixed(1)} A${n._r.toFixed(1)} ${n._r.toFixed(1)} 0 0 ${sweep} ${x1.toFixed(1)} ${y1.toFixed(1)} L${x2.toFixed(1)} ${y2.toFixed(1)}"
+                 fill="none" stroke="${clusterColour(cl, cl ? 62 : 82)}"
+                 stroke-width="${cl ? 1.7 : 1.1}" stroke-linecap="round" opacity="${cl ? 0.85 : 0.5}"/>`);
+        link(c);
+      }
+    })(d.tree);
+
+    const leafMarks = leaves.map(l => {
+      const [x, y] = pol(R, l._a);
+      const deg = l._a * 180 / Math.PI;
+      const flip = deg > 90 || deg < -90;
+      const [tx, ty] = pol(R + 10, l._a);
+      const name = l.name.length > 26 ? l.name.slice(0, 25) + '\u2026' : l.name;
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${l.collapsed ? 4.4 : 3}"
+                      fill="${clusterColour(l.cluster, 54)}"/>
+        <text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}"
+              transform="rotate(${(flip ? deg + 180 : deg).toFixed(1)} ${tx.toFixed(1)} ${ty.toFixed(1)})"
+              text-anchor="${flip ? 'end' : 'start'}" dominant-baseline="middle"
+              font-size="9.5" font-family="var(--f-body)" fill="var(--ink-mute)">${esc(name)}</text>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="dendro-wrap">
+        <svg viewBox="0 0 ${SIZE} ${SIZE}" class="dendro" role="img"
+             aria-label="Circular dendrogram of document clusters">
+          <circle cx="${CX}" cy="${CY}" r="${R}" fill="none"
+                  stroke="var(--line)" stroke-dasharray="2 6"/>
+          ${paths.join('')}
+          ${leafMarks}
+          <circle cx="${CX}" cy="${CY}" r="4" fill="var(--ink-faint)"/>
+        </svg>
+        <div class="dendro-key">
+          <div class="eyebrow" style="margin-bottom:.8rem">Clusters</div>
+          <p class="tiny muted" style="margin:0 0 1rem">
+            ${d.documents} documents clustered by Ward linkage in concept space.
+            Documents sit on the same branch because they discuss the same
+            things — not because they were filed together.
+          </p>
+          ${d.clusters.map(c => `
+            <div class="dendro-cl">
+              <span class="swatch" style="background:${clusterColour(c.cluster, 54)}"></span>
+              <div>
+                <b>${c.n} documents</b>
+                ${c.spread > 2 ? `<span class="badge red" style="margin-left:.4rem">spans ${c.spread} units</span>` : ''}
+                <div class="tiny muted">${esc(c.subjects.slice(0, 3).join(' · '))}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
   }
 
   // ---------------------------------------------------------------------------

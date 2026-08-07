@@ -276,12 +276,68 @@ def test_multi_hop_chain_exists(tenant):
     pytest.fail(f"{tenant['slug']} has no traversable two-hop chain")
 
 
+EXPECTED_METRICS = ("depth", "connectedness", "traceability",
+                    "readability", "currency")
+
+
 def test_health_scores_are_bounded(tenant):
     h = tenant["health"]
     assert 0 <= h["overall"] <= 100
-    for d in h["dimensions"]:
-        assert 0 <= d["score"] <= 100, f"{d['key']} out of range"
-        assert d["action"], f"{d['key']} has no remediation action"
+    keys = [m["key"] for m in h["metrics"]]
+    assert keys == list(EXPECTED_METRICS), f"unexpected metric set: {keys}"
+    for m in h["metrics"]:
+        assert 0 <= m["value"] <= 100, f"{m['key']} out of range"
+
+
+def test_every_metric_states_its_derivation(tenant):
+    """A score with no derivation is a number someone has to take on trust."""
+    for m in tenant["health"]["metrics"]:
+        assert m["formula"], f"{m['key']} has no formula"
+        assert m["inputs"], f"{m['key']} shows no raw inputs"
+        assert m["what"] and m["risk"], f"{m['key']} does not say why it matters"
+
+
+def test_every_risk_states_how_it_is_counted(tenant):
+    risks = tenant["health"]["risks"]
+    assert len(risks) == 4, f"expected 4 risks, found {len(risks)}"
+    for r in risks:
+        assert r["how"], f"{r['label']} does not say how it is counted"
+        assert r["detail"] and r["why"]
+
+
+def test_health_metrics_actually_discriminate(registry):
+    """A metric that reads the same on every tenant is decoration.
+
+    Three of these saturated at 100 in an earlier build — the corpus was
+    uniformly perfect, so the numbers measured the generator rather than the
+    data. This fails if any metric flattens out again.
+    """
+    import statistics
+    values = {k: [] for k in EXPECTED_METRICS}
+    for t in registry["tenants"]:
+        path = TENANTS / t["slug"] / "fabric" / "health.json"
+        if not path.exists():
+            continue
+        for m in json.loads(path.read_text())["metrics"]:
+            values[m["key"]].append(m["value"])
+    for key, vals in values.items():
+        if len(vals) < 3:
+            continue
+        assert max(vals) < 99.5, f"{key} is saturated at {max(vals)}"
+        assert statistics.pstdev(vals) > 1.5, \
+            f"{key} barely varies across tenants (sd={statistics.pstdev(vals):.2f})"
+
+
+def test_prose_classification_is_sane():
+    """The classifier decides what reaches an answer, so its failure modes
+    matter more than its accuracy."""
+    from pipeline.textnorm import classify_sentence
+    assert classify_sentence(
+        "Records are created contemporaneously and must be attributable to a "
+        "named individual.") == "prose"
+    assert classify_sentence("A01   1234   56.7   PASS   B02   9876   12.3   FAIL") == "table"
+    assert classify_sentence("TC Rev 3.1 Effective 2025-04-02 Page 12 of 48") == "header"
+    assert classify_sentence("C = 24 x 8 / 3 \u00b1 1.4 where n >= 12") == "equation"
 
 
 def test_registry_totals_match_tenants(registry):
@@ -366,3 +422,52 @@ def test_brand_assets_are_not_oversized():
     for f in files:
         kb = f.stat().st_size / 1024
         assert kb <= 90, f"{f.name} is {kb:.0f} KB, over the 90 KB ceiling"
+
+
+# ---------------------------------------------------------------------------
+# Clustering
+# ---------------------------------------------------------------------------
+
+def test_dendrogram_is_built(tenant):
+    path = TENANTS / tenant["slug"] / "fabric" / "dendrogram.json"
+    assert path.exists(), "dendrogram.json not generated"
+    d = json.loads(path.read_text())
+    assert d.get("enabled"), f"clustering disabled for {tenant['slug']}"
+    assert d["documents"] >= 8
+    assert 2 <= len(d["clusters"]) <= 12
+
+
+def test_dendrogram_tree_is_well_formed(tenant):
+    """A malformed tree renders as a starburst rather than a dendrogram."""
+    d = json.loads((TENANTS / tenant["slug"] / "fabric" / "dendrogram.json").read_text())
+
+    def walk(node, depth=0):
+        assert depth < 40, "tree deeper than the collapse budget should allow"
+        if node.get("leaf"):
+            assert node.get("name"), "leaf without a label"
+            return 1
+        kids = node.get("children") or []
+        assert len(kids) == 2, "linkage tree must be binary"
+        # Merge height must decrease outward, or the radial layout inverts.
+        for c in kids:
+            assert c.get("height", 0) <= node["height"] + 1e-6, \
+                "child merged at a greater height than its parent"
+        return sum(walk(c, depth + 1) for c in kids)
+
+    leaves = walk(d["tree"])
+    assert 8 <= leaves <= 120, f"{leaves} leaves is outside the readable range"
+
+
+def test_every_leaf_has_a_cluster_colour(tenant):
+    d = json.loads((TENANTS / tenant["slug"] / "fabric" / "dendrogram.json").read_text())
+    seen = set()
+
+    def walk(n):
+        if n.get("leaf"):
+            seen.add(n.get("cluster", 0))
+            return
+        for c in n["children"]:
+            walk(c)
+
+    walk(d["tree"])
+    assert seen - {0}, "no leaf carries a cluster assignment"

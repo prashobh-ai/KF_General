@@ -388,6 +388,30 @@ section { padding: clamp(4.5rem, 9vh, 8rem) 0; }
   background: radial-gradient(ellipse 82% 78% at 50% 50%, transparent 58%, rgba(233,240,252,.92) 100%);
 }
 
+/* Node labels. Positioned by projection from the WebGL scene, so they track
+   the 3D layout while staying crisp HTML text at any zoom. */
+.glabels { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.glabel {
+  position: absolute; top: 0; left: 0;
+  display: none; white-space: nowrap;
+  font-family: var(--f-body); font-size: .72rem; font-weight: 600;
+  letter-spacing: -.005em; line-height: 1;
+  color: var(--ink-soft);
+  padding: .2rem .45rem; border-radius: 6px;
+  background: rgba(255,255,255,.82);
+  border: 1px solid rgba(31,42,61,.08);
+  pointer-events: auto; cursor: pointer;
+  transition: color .2s, background .2s, border-color .2s;
+  will-change: transform;
+}
+.glabel:hover { color: var(--qz-blue); border-color: var(--line-hot); background: #fff; }
+.glabel.near { color: var(--qz-blue-deep); border-color: rgba(0,150,255,.28); background: rgba(255,255,255,.94); }
+.glabel.on {
+  color: #fff; font-weight: 700;
+  background: var(--qz-red); border-color: var(--qz-red);
+  box-shadow: 0 3px 10px rgba(245,62,90,.34);
+}
+
 .stage-ui { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .stage-ui > * { pointer-events: auto; }
 
@@ -686,4 +710,119 @@ footer .note { font-size: .78rem; color: var(--ink-faint); max-width: 68ch; }
     scroll-behavior: auto !important;
   }
   .rise { opacity: 1; transform: none; }
+}
+
+/* ===== Circular dendrogram =============================================== */
+
+.dendro-wrap {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.25fr) minmax(240px, .85fr);
+  gap: 2rem;
+  align-items: center;
+}
+.dendro { width: 100%; height: auto; max-height: 620px; overflow: visible; }
+.dendro path { transition: opacity .3s var(--ease), stroke-width .3s var(--ease); }
+.dendro:hover path { opacity: .32; }
+.dendro path:hover { opacity: 1; stroke-width: 3; }
+.dendro circle { transition: r .25s var(--spring); }
+
+.dendro-key { align-self: start; padding-top: .4rem; }
+.dendro-cl {
+  display: flex; gap: .7rem; align-items: flex-start;
+  padding: .55rem .6rem; border-radius: var(--r-sm);
+  transition: background .25s var(--ease);
+}
+.dendro-cl:hover { background: var(--qz-paper); }
+.dendro-cl .swatch {
+  width: 12px; height: 12px; border-radius: 4px; flex: none; margin-top: .28rem;
+  box-shadow: 0 1px 3px rgba(31,42,61,.18);
+}
+.dendro-cl b { font-size: .88rem; color: var(--ink); }
+
+@media (max-width: 900px) {
+  .dendro-wrap { grid-template-columns: 1fr; }
+  .dendro { max-height: 460px; }
+}
+
+/* ===== Knowledge health — concentric rings ============================== */
+
+.rings { width: 100%; height: auto; max-width: 300px; }
+.rings-n {
+  font-family: var(--f-display); font-size: 2.4rem; font-weight: 800;
+  letter-spacing: -.04em; fill: var(--ink);
+}
+.rings-l {
+  font-family: var(--f-mono); font-size: .56rem; letter-spacing: .22em;
+  fill: var(--ink-mute);
+}
+.ring-track { fill: none; stroke: rgba(31,42,61,.07); stroke-linecap: round; }
+.ring-arc {
+  fill: none; stroke-linecap: round;
+  /* Drawn by animating stroke-dashoffset, so the composition assembles with
+     no per-frame JavaScript. */
+  transition: stroke-dashoffset 1.5s var(--ease-out) var(--delay),
+              opacity .3s var(--ease);
+}
+.ring-cap {
+  opacity: 0;
+  transition: opacity .5s var(--ease) var(--delay);
+  filter: drop-shadow(0 0 4px currentColor);
+}
+.ring-cap.in { opacity: 1; }
+.ring-arc.dim, .ring-cap.dim { opacity: .16; }
+
+/* ===== Flip cards ======================================================== */
+
+.flip { perspective: 1400px; cursor: pointer; outline: none; }
+.flip-in {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .62s var(--ease-out);
+  min-height: 230px;
+}
+.flip.flipped .flip-in { transform: rotateY(180deg); }
+.flip-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  inset: 0;
+}
+/* The front sits in flow so the card sizes to its content; the back is
+   absolutely positioned over it. */
+.flip-face:first-child { position: relative; height: 100%; }
+.flip-back { position: absolute; transform: rotateY(180deg); overflow: auto; }
+.flip:focus-visible .flip-in { box-shadow: 0 0 0 3px rgba(0,150,255,.35); border-radius: var(--r-lg); }
+
+.flip .metric-n {
+  font-family: var(--f-display); font-size: 1.5rem; font-weight: 800;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+}
+.flip-hint {
+  display: block; margin-top: .9rem;
+  font-family: var(--f-mono); font-size: .62rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--qz-blue);
+  opacity: .75; transition: opacity .25s;
+}
+.flip:hover .flip-hint { opacity: 1; }
+
+.formula {
+  display: block; padding: .6rem .7rem; margin-bottom: .9rem;
+  background: var(--qz-paper); border: 1px solid rgba(31,42,61,.10);
+  border-radius: var(--r-sm);
+  font-family: var(--f-mono); font-size: .7rem; line-height: 1.5;
+  color: var(--qz-blue-deep); word-break: break-word;
+}
+.kvs { display: flex; flex-direction: column; gap: .3rem; }
+.kv {
+  display: flex; justify-content: space-between; gap: 1rem;
+  font-size: .74rem; padding: .22rem 0;
+  border-bottom: 1px dashed rgba(31,42,61,.09);
+}
+.kv span { color: var(--ink-mute); }
+.kv b { color: var(--ink); font-family: var(--f-mono); font-size: .72rem; text-align: right; }
+
+.flip.risk .flip-in { min-height: 190px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-in { transition: none; }
+  .ring-arc { transition: none; }
 }

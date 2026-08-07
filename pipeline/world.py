@@ -71,11 +71,11 @@ class Relation:
 SPECS: dict[str, dict] = {
     "q-airlines": {
         "types": {
-            "aircraft": {"n": 14, "label": "Aircraft {ref}", "id": "tail"},
-            "station": {"n": 10, "label": "Station {ref}", "id": "station"},
-            "flight": {"n": 18, "label": "Flight {ref}", "id": "flight"},
-            "melitem": {"n": 12, "label": "MEL item {ref}", "id": "mel"},
-            "delaycode": {"n": 10, "label": "Delay code {ref}", "id": "delay"},
+            "aircraft": {"n": 34, "label": "Aircraft {ref}", "id": "tail"},
+            "station": {"n": 24, "label": "Station {ref}", "id": "station"},
+            "flight": {"n": 43, "label": "Flight {ref}", "id": "flight"},
+            "melitem": {"n": 29, "label": "MEL item {ref}", "id": "mel"},
+            "delaycode": {"n": 24, "label": "Delay code {ref}", "id": "delay"},
         },
         "links": [
             ("flight", "OPERATED_BY", "aircraft", 1),
@@ -88,11 +88,11 @@ SPECS: dict[str, dict] = {
     },
     "q-aerotech": {
         "types": {
-            "aircraft": {"n": 12, "label": "Aircraft {ref}", "id": "tail"},
-            "component": {"n": 18, "label": "Component {ref}", "id": "part"},
-            "ad": {"n": 12, "label": "AD {ref}", "id": "ad"},
-            "workorder": {"n": 16, "label": "Work order {ref}", "id": "wo"},
-            "shop": {"n": 6, "label": "{ref}", "id": "shop"},
+            "aircraft": {"n": 29, "label": "Aircraft {ref}", "id": "tail"},
+            "component": {"n": 43, "label": "Component {ref}", "id": "part"},
+            "ad": {"n": 29, "label": "AD {ref}", "id": "ad"},
+            "workorder": {"n": 38, "label": "Work order {ref}", "id": "wo"},
+            "shop": {"n": 14, "label": "{ref}", "id": "shop"},
         },
         "links": [
             ("component", "INSTALLED_ON", "aircraft", 1),
@@ -104,11 +104,11 @@ SPECS: dict[str, dict] = {
     },
     "q-health": {
         "types": {
-            "pathway": {"n": 10, "label": "Pathway {ref}", "id": "path"},
-            "orderset": {"n": 14, "label": "Order set {ref}", "id": "os"},
-            "condition": {"n": 12, "label": "{ref}", "id": "icd"},
-            "unitward": {"n": 8, "label": "{ref}", "id": "ward"},
-            "interface": {"n": 8, "label": "Interface {ref}", "id": "ifc"},
+            "pathway": {"n": 24, "label": "Pathway {ref}", "id": "path"},
+            "orderset": {"n": 34, "label": "Order set {ref}", "id": "os"},
+            "condition": {"n": 29, "label": "{ref}", "id": "icd"},
+            "unitward": {"n": 19, "label": "{ref}", "id": "ward"},
+            "interface": {"n": 19, "label": "Interface {ref}", "id": "ifc"},
         },
         "links": [
             ("pathway", "TRIGGERS", "orderset", 2),
@@ -120,11 +120,11 @@ SPECS: dict[str, dict] = {
     },
     "q-assure-claims": {
         "types": {
-            "policy": {"n": 12, "label": "Policy {ref}", "id": "mcp"},
-            "carc": {"n": 11, "label": "CARC {ref}", "id": "carc"},
-            "provider": {"n": 12, "label": "Provider {ref}", "id": "npi"},
-            "claimbatch": {"n": 14, "label": "Claim batch {ref}", "id": "icn"},
-            "edifile": {"n": 8, "label": "{ref}", "id": "x12"},
+            "policy": {"n": 29, "label": "Policy {ref}", "id": "mcp"},
+            "carc": {"n": 26, "label": "CARC {ref}", "id": "carc"},
+            "provider": {"n": 29, "label": "Provider {ref}", "id": "npi"},
+            "claimbatch": {"n": 34, "label": "Claim batch {ref}", "id": "icn"},
+            "edifile": {"n": 19, "label": "{ref}", "id": "x12"},
         },
         "links": [
             ("claimbatch", "SUBMITTED_BY", "provider", 1),
@@ -136,11 +136,11 @@ SPECS: dict[str, dict] = {
     },
     "q-pharma": {
         "types": {
-            "product": {"n": 8, "label": "Product {ref}", "id": "prod"},
-            "batch": {"n": 18, "label": "Batch {ref}", "id": "batch"},
-            "deviation": {"n": 14, "label": "Deviation {ref}", "id": "dev"},
-            "capa": {"n": 12, "label": "CAPA {ref}", "id": "capa"},
-            "line": {"n": 6, "label": "{ref}", "id": "line"},
+            "product": {"n": 19, "label": "Product {ref}", "id": "prod"},
+            "batch": {"n": 43, "label": "Batch {ref}", "id": "batch"},
+            "deviation": {"n": 34, "label": "Deviation {ref}", "id": "dev"},
+            "capa": {"n": 29, "label": "CAPA {ref}", "id": "capa"},
+            "line": {"n": 14, "label": "{ref}", "id": "line"},
         },
         "links": [
             ("batch", "OF_PRODUCT", "product", 1),
@@ -152,11 +152,11 @@ SPECS: dict[str, dict] = {
     },
     "q-devicelab": {
         "types": {
-            "device": {"n": 8, "label": "Device {ref}", "id": "dev"},
-            "hazard": {"n": 14, "label": "Hazard {ref}", "id": "haz"},
-            "control": {"n": 14, "label": "Risk control {ref}", "id": "rc"},
-            "complaint": {"n": 16, "label": "Complaint {ref}", "id": "cmp"},
-            "softitem": {"n": 10, "label": "Software item {ref}", "id": "sw"},
+            "device": {"n": 19, "label": "Device {ref}", "id": "dev"},
+            "hazard": {"n": 34, "label": "Hazard {ref}", "id": "haz"},
+            "control": {"n": 34, "label": "Risk control {ref}", "id": "rc"},
+            "complaint": {"n": 38, "label": "Complaint {ref}", "id": "cmp"},
+            "softitem": {"n": 24, "label": "Software item {ref}", "id": "sw"},
         },
         "links": [
             ("hazard", "ARISES_IN", "device", 1),
@@ -168,11 +168,11 @@ SPECS: dict[str, dict] = {
     },
     "q-bank": {
         "types": {
-            "borrower": {"n": 12, "label": "Borrower {ref}", "id": "cif"},
-            "facility": {"n": 16, "label": "Facility {ref}", "id": "loan"},
-            "covenant": {"n": 12, "label": "Covenant {ref}", "id": "cov"},
-            "alert": {"n": 14, "label": "AML alert {ref}", "id": "alert"},
-            "model": {"n": 8, "label": "Model {ref}", "id": "model"},
+            "borrower": {"n": 29, "label": "Borrower {ref}", "id": "cif"},
+            "facility": {"n": 38, "label": "Facility {ref}", "id": "loan"},
+            "covenant": {"n": 29, "label": "Covenant {ref}", "id": "cov"},
+            "alert": {"n": 34, "label": "AML alert {ref}", "id": "alert"},
+            "model": {"n": 19, "label": "Model {ref}", "id": "model"},
         },
         "links": [
             ("facility", "EXTENDED_TO", "borrower", 1),
@@ -184,11 +184,11 @@ SPECS: dict[str, dict] = {
     },
     "q-assurance": {
         "types": {
-            "engagement": {"n": 10, "label": "Engagement {ref}", "id": "eng"},
-            "account": {"n": 12, "label": "{ref}", "id": "acct"},
-            "risk": {"n": 14, "label": "RMM {ref}", "id": "rmm"},
-            "control": {"n": 14, "label": "Control {ref}", "id": "ctrl"},
-            "workpaper": {"n": 16, "label": "Workpaper {ref}", "id": "wp"},
+            "engagement": {"n": 24, "label": "Engagement {ref}", "id": "eng"},
+            "account": {"n": 29, "label": "{ref}", "id": "acct"},
+            "risk": {"n": 34, "label": "RMM {ref}", "id": "rmm"},
+            "control": {"n": 34, "label": "Control {ref}", "id": "ctrl"},
+            "workpaper": {"n": 38, "label": "Workpaper {ref}", "id": "wp"},
         },
         "links": [
             ("risk", "IDENTIFIED_IN", "engagement", 1),
@@ -200,11 +200,11 @@ SPECS: dict[str, dict] = {
     },
     "q-cruise": {
         "types": {
-            "vessel": {"n": 9, "label": "{ref}", "id": "vessel"},
-            "port": {"n": 12, "label": "Port {ref}", "id": "port"},
-            "deficiency": {"n": 12, "label": "Deficiency {ref}", "id": "psc"},
-            "equipment": {"n": 14, "label": "Equipment {ref}", "id": "equip"},
-            "voyage": {"n": 14, "label": "Voyage {ref}", "id": "voy"},
+            "vessel": {"n": 22, "label": "{ref}", "id": "vessel"},
+            "port": {"n": 29, "label": "Port {ref}", "id": "port"},
+            "deficiency": {"n": 29, "label": "Deficiency {ref}", "id": "psc"},
+            "equipment": {"n": 34, "label": "Equipment {ref}", "id": "equip"},
+            "voyage": {"n": 34, "label": "Voyage {ref}", "id": "voy"},
         },
         "links": [
             ("voyage", "SAILED_BY", "vessel", 1),
@@ -217,11 +217,11 @@ SPECS: dict[str, dict] = {
     },
     "q-retail": {
         "types": {
-            "vendor": {"n": 12, "label": "Vendor {ref}", "id": "gln"},
-            "item": {"n": 16, "label": "Item {ref}", "id": "gtin"},
-            "po": {"n": 16, "label": "PO {ref}", "id": "po"},
-            "dc": {"n": 6, "label": "{ref}", "id": "dc"},
-            "chargeback": {"n": 12, "label": "Chargeback {ref}", "id": "cb"},
+            "vendor": {"n": 29, "label": "Vendor {ref}", "id": "gln"},
+            "item": {"n": 38, "label": "Item {ref}", "id": "gtin"},
+            "po": {"n": 38, "label": "PO {ref}", "id": "po"},
+            "dc": {"n": 14, "label": "{ref}", "id": "dc"},
+            "chargeback": {"n": 29, "label": "Chargeback {ref}", "id": "cb"},
         },
         "links": [
             ("po", "PLACED_WITH", "vendor", 1),
@@ -233,11 +233,11 @@ SPECS: dict[str, dict] = {
     },
     "q-quality": {
         "types": {
-            "release": {"n": 10, "label": "Release {ref}", "id": "rel"},
-            "requirement": {"n": 16, "label": "Requirement {ref}", "id": "req"},
-            "testcase": {"n": 18, "label": "Test case {ref}", "id": "tc"},
-            "defect": {"n": 16, "label": "Defect {ref}", "id": "def"},
-            "environment": {"n": 6, "label": "{ref}", "id": "env"},
+            "release": {"n": 24, "label": "Release {ref}", "id": "rel"},
+            "requirement": {"n": 38, "label": "Requirement {ref}", "id": "req"},
+            "testcase": {"n": 43, "label": "Test case {ref}", "id": "tc"},
+            "defect": {"n": 38, "label": "Defect {ref}", "id": "def"},
+            "environment": {"n": 14, "label": "{ref}", "id": "env"},
         },
         "links": [
             ("testcase", "COVERS", "requirement", 1),

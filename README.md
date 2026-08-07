@@ -120,6 +120,44 @@ Every sentence is lifted **verbatim** from an indexed passage. Nothing generates
 prose, so nothing can hallucinate. Below threshold the system returns an explicit
 non-answer naming which check failed.
 
+### Knowledge health
+
+Five measures, each stating its own formula and raw inputs, rendered as
+concentric arcs with the derivation on the back of every card:
+
+| Measure | Asks |
+|---|---|
+| **Depth** | How much usable material does each document contribute? |
+| **Connectedness** | How often does the same topic appear across documents? |
+| **Traceability** | Can we say when each document is from, and how we know? |
+| **Readability** | How much of the text is prose rather than extraction debris? |
+| **Currency** | How recent is the material we can actually date? |
+
+Plus a risk register counted rather than estimated: extraction debris, singleton
+concepts, isolated documents, undated documents.
+
+Making these honest required making the corpus imperfect. A generator that
+emits uniformly complete, uniformly dated, uniformly clean documents produces
+five scores of 100, which measure the generator rather than the data. So the
+corpus now contains what a real estate contains: stub documents, documents whose
+date survives only as a system timestamp or not at all, and extraction debris
+whose volume tracks each industry's layout density — a maintenance task card is
+mostly tables, an audit planning memorandum is mostly prose.
+
+Two formulas deliberately depart from the reference implementation, and the
+reasons are worth stating:
+
+- **Depth** scores the share of documents clearing the threshold rather than
+  the mean passages per document. A mean saturates — one richly-documented
+  procedure hides ten stubs.
+- **Connectedness** reports the raw cross-document share instead of normalising
+  against a 0.35 "healthy" threshold, and it excludes organisational
+  scaffolding (units, systems, authorities) which is attached to nearly every
+  document by construction. Counting it pins every corpus at 100.
+
+A test fails the build if any metric saturates or flattens across tenants,
+because a score that reads the same everywhere is decoration.
+
 ### Confidence
 
 Five measured signals combined as a weighted **geometric** mean — retrieval
@@ -214,6 +252,40 @@ slide holds it.
 Each tenant leads with its own **Q-Domain** lockup, and the tenant name *is*
 the Q-Domain name. Pairing a Q-Airlines logo with an invented trading name put
 two competing identities on one card.
+
+### The graph is labelled
+
+Every node worth naming carries one. An unlabelled particle cloud is decorative;
+a viewer cannot tell what they are looking at or what lit up. Labels are HTML
+projected from the WebGL scene rather than sprite textures — 300 canvas textures
+cost memory and render blurry under DPR scaling, whereas moving absolutely
+positioned divs gives crisp text at any zoom.
+
+The visible set is chosen by relevance: activated nodes always get a label, then
+the highest-degree nodes fill a budget of roughly 18, with screen-space
+collision rejection because overlapping labels are worse than fewer labels —
+unreadable *and* they hide the graph. The camera also reframes onto the
+activated subgraph, so the user never has to hunt for what changed.
+
+Layout carries a short-range overlap-avoidance force. Without one, nodes stack
+in the core and no label can be placed there, which is what made the dense
+centre unusable.
+
+### Clusters — the circular dendrogram
+
+Every other insights panel answers *how much of X is there*. The Clusters panel
+answers *how does this corpus organise itself*, which is the question someone
+inheriting a document estate actually has.
+
+Documents are embedded in the same LSA concept space the semantic retriever
+uses, then merged bottom-up by Ward linkage. The tree is not imposed by the
+taxonomy — two documents land on the same branch because they discuss the same
+things. That is why clusters routinely cut across owning units, and why each
+one is annotated with how many units it spans: a cluster spreading over seven
+units means the same subject is being documented independently in seven places.
+
+Rendered radially because the meaningful structure is the top-level split near
+the centre, and a circle gives every leaf equal room on the rim.
 
 ### Graph activation
 

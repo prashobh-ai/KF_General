@@ -53,6 +53,24 @@ SURNAMES = (
 )
 
 
+# Share of non-stub documents that carry extraction debris, by domain.
+# Table-heavy engineering and transactional corpora sit high; narrative
+# professional-services corpora sit low.
+LAYOUT_DENSITY = {
+    "q-aerotech": 0.62,        # task cards, capability lists, parts tables
+    "q-assure-claims": 0.58,   # EDI segment maps, code tables
+    "q-retail": 0.54,          # routing guides, EDI specs, chargeback schedules
+    "q-airlines": 0.46,        # MEL items, load sheets
+    "q-devicelab": 0.42,       # V&V protocols, traceability matrices
+    "q-quality": 0.40,         # RTMs, defect matrices
+    "q-pharma": 0.36,          # batch records, but heavy narrative investigation
+    "q-cruise": 0.30,          # procedures with occasional logs
+    "q-health": 0.26,          # policies and pathways, largely narrative
+    "q-bank": 0.22,            # credit memoranda, policy prose
+    "q-assurance": 0.16,       # planning memoranda and workpaper narrative
+}
+
+
 def _person(rng: random.Random) -> tuple[str, str]:
     return rng.choice(FORENAMES), rng.choice(SURNAMES)
 
@@ -74,7 +92,10 @@ class DocumentBuilder:
         self.pack = pack
         self.rng = random.Random(seed)
         self.ids = IdFactory(seed)
-        self.dates = DateSpread(self.rng, years=3, peak_month=peak_month)
+        # A document estate accumulates over years, not one refresh cycle.
+        # A three-year window put every median inside the fresh threshold,
+        # so Currency reported 100 regardless of the corpus.
+        self.dates = DateSpread(self.rng, years=7, peak_month=peak_month)
         self.people = [
             (f, s, role)
             for role in pack.roles
@@ -86,6 +107,12 @@ class DocumentBuilder:
         # The domain world: concrete instances documents will reference by
         # identifier. Because many documents cite the same instances, the graph
         # gains cross-document structure that metadata alone cannot produce.
+        # Layout density varies by industry, and so should extraction debris.
+        # A maintenance task card or an EDI companion guide is mostly tables;
+        # an audit planning memorandum is mostly prose. Applying one debris
+        # rate everywhere made Readability read the same on every tenant.
+        self.layout_density = LAYOUT_DENSITY.get(pack.slug, 0.34)
+
         self.world, self.world_rels = build_world(pack, seed)
         self.world_kinds = list(self.world.keys())
 
@@ -373,6 +400,28 @@ class DocumentBuilder:
         self._used.update(picked)
         return " ".join(picked)
 
+    def _debris(self, dtype: DocType, subject: str, eff) -> str:
+        """A block of the text PDF extraction actually produces."""
+        rng = self.rng
+        kind = rng.choice(("row", "header", "equation", "caption"))
+        if kind == "row":
+            return " ".join(
+                f"{rng.choice(('A','B','C','D'))}{rng.randint(1,99):02d}   "
+                f"{rng.randint(1,9999)}   {rng.randint(0,99)}.{rng.randint(0,9)}   "
+                f"{rng.choice(('PASS','FAIL','N/A','OPEN'))}"
+                for _ in range(rng.randint(3, 5)))
+        if kind == "header":
+            return (f"{dtype.abbrev} Rev {self.ids.version()} "
+                    f"Effective {eff.isoformat()} Page {rng.randint(2, 40)} of "
+                    f"{rng.randint(40, 90)} Uncontrolled when printed")
+        if kind == "equation":
+            return (f"C = {rng.randint(2, 40)} x {rng.randint(2, 12)} / "
+                    f"{rng.randint(2, 8)} \u00b1 {rng.randint(1, 9)}.{rng.randint(0,9)} "
+                    f"where n >= {rng.randint(3, 30)}")
+        return (f"Figure {rng.randint(1, 12)}. {subject.title()} "
+                f"{rng.choice(('schematic','flow','matrix','trend'))} "
+                f"{rng.randint(1, 9)} {rng.randint(10, 99)} {rng.randint(100, 999)}")
+
     def _code_table(self, keys: tuple[str, ...]) -> str:
         for key in keys:
             picked = self._codes(key, self.rng.randint(3, 6))
@@ -392,8 +441,28 @@ class DocumentBuilder:
         p = self.pack
         rng = self.rng
         eff = self.dates.draw()
+
+        # Date provenance. A real document estate does not know when every file
+        # is from: some carry a signed revision stamp, some only a filesystem
+        # timestamp, and some nothing at all. Generating every document with a
+        # perfect effective date would make Traceability read 100 on every
+        # tenant, which measures the generator rather than the corpus.
+        roll = rng.random()
+        if roll < 0.62:
+            date_source, authoritative = "approved_revision_stamp", True
+        elif roll < 0.78:
+            date_source, authoritative = "system_of_record_timestamp", False
+        elif roll < 0.88:
+            date_source, authoritative = "date_in_body_text", False
+        else:
+            date_source, authoritative = "unknown", False
         review = eff + dt.timedelta(days=rng.choice([365, 545, 730]))
         subject = rng.choice(p.subjects)
+
+        # Roughly one document in six is a stub — a notice, a single-section
+        # memo, a placeholder someone never finished. Real estates are full of
+        # them, and they are precisely what Depth exists to surface.
+        thin = rng.random() < 0.17
         site = rng.choice(p.sites)
         year = eff.year
         doc_id = f"{dtype.id_grammar}-{year}-{index:04d}"
@@ -401,6 +470,7 @@ class DocumentBuilder:
         title = f"{dtype.name} — {subject.title()}"
         ctx = {"unit": unit, "site": site, "subject": subject}
         self._used: set[str] = set()
+        debris_heavy = (not thin) and rng.random() < self.layout_density
 
         # Pick the instances this document is about. Two or three kinds, a
         # handful each — enough that documents overlap heavily on entities
@@ -408,11 +478,11 @@ class DocumentBuilder:
         cited: list = []
         if self.world_kinds:
             kinds = rng.sample(self.world_kinds,
-                               k=min(3, len(self.world_kinds)))
+                               k=min(2, len(self.world_kinds)))
             for k in kinds:
                 pool = self.world.get(k) or []
                 if pool:
-                    cited += rng.sample(pool, k=min(rng.randint(1, 3), len(pool)))
+                    cited += rng.sample(pool, k=min(rng.randint(1, 2), len(pool)))
         ctx["cited"] = cited
 
         lines: list[str] = []
@@ -428,7 +498,11 @@ class DocumentBuilder:
         lines.append(f"| Document type | {dtype.name} ({dtype.abbrev}) |")
         lines.append(f"| Revision | {rev} |")
         lines.append(f"| Status | Effective |")
-        lines.append(f"| Effective date | {eff.isoformat()} |")
+        if date_source == "unknown":
+            lines.append("| Effective date | Not recorded |")
+        else:
+            lines.append(f"| Effective date | {eff.isoformat()} "
+                         f"({date_source.replace('_', ' ')}) |")
         lines.append(f"| Next review | {review.isoformat()} |")
         lines.append(f"| Owning unit | {unit} |")
         lines.append(f"| Document owner | {of} {os_}, {orole} |")
@@ -443,14 +517,32 @@ class DocumentBuilder:
         code_placed = False
         entities: set[str] = {unit, site, dtype.system, dtype.authority}
 
-        for i, section in enumerate(dtype.sections, start=1):
+        sections = dtype.sections
+        if thin:
+            sections = dtype.sections[:rng.randint(1, 2)]
+
+        for i, section in enumerate(sections, start=1):
             lines.append(f"## {i}. {section}")
             lines.append("")
-            n_paras = rng.randint(1, 3)
+            n_paras = 1 if thin else rng.randint(1, 3)
             for _ in range(n_paras):
                 lines.append(textwrap.fill(
                     self._paragraph(dtype, section, subject, ctx), 96))
                 lines.append("")
+            # Extraction debris. These corpora stand in for PDF-derived
+            # estates, where flattened table rows and running headers land in
+            # the text stream and get indexed as if they were sentences. Some
+            # documents are layout-heavy and some are not, which is what makes
+            # Readability vary rather than sit at a constant.
+            if debris_heavy and rng.random() < 0.55:
+                # Volume scales with layout density as well as frequency. A
+                # table-heavy document does not carry one stray row, it carries
+                # a whole flattened table — and it is the volume, not the
+                # incidence, that determines how much of the index is unusable.
+                for _ in range(1 + int(self.layout_density * 4)):
+                    lines.append(self._debris(dtype, subject, eff))
+                    lines.append("")
+
             # Place the controlled-vocabulary table once, in a middle section,
             # where a real document would put it rather than in the intro.
             if not code_placed and i >= 2 and rng.random() < 0.55:
@@ -461,7 +553,7 @@ class DocumentBuilder:
                     code_placed = True
 
         # -- definitions -----------------------------------------------------
-        lines.append(f"## {len(dtype.sections) + 1}. Definitions and Acronyms")
+        lines.append(f"## {len(sections) + 1}. Definitions and Acronyms")
         lines.append("")
         terms = rng.sample(list(p.lexicon), k=min(5, len(p.lexicon)))
         for t in terms:
@@ -474,7 +566,7 @@ class DocumentBuilder:
         # also the machine-readable anchor the graph builder reads, so entity
         # edges trace to a specific table row rather than to fuzzy text matching.
         if cited:
-            lines.append(f"## {len(dtype.sections) + 2}. Entities in Scope")
+            lines.append(f"## {len(sections) + 2}. Entities in Scope")
             lines.append("")
             lines.append("| Identifier | Type | Detail |")
             lines.append("| --- | --- | --- |")
@@ -484,7 +576,7 @@ class DocumentBuilder:
             lines.append("")
 
         # -- references (graph edges) ----------------------------------------
-        lines.append(f"## {len(dtype.sections) + 3}. References")
+        lines.append(f"## {len(sections) + 3}. References")
         lines.append("")
         refs: list[str] = []
         pool = [r for r in self._registry if r["id"] != doc_id]
@@ -496,7 +588,7 @@ class DocumentBuilder:
         lines.append("")
 
         # -- revision history -------------------------------------------------
-        lines.append(f"## {len(dtype.sections) + 4}. Revision History")
+        lines.append(f"## {len(sections) + 4}. Revision History")
         lines.append("")
         lines.append("| Revision | Date | Author | Description | Approver |")
         lines.append("| --- | --- | --- | --- | --- |")
@@ -521,7 +613,7 @@ class DocumentBuilder:
         lines.append("")
 
         # -- approval ---------------------------------------------------------
-        lines.append(f"## {len(dtype.sections) + 5}. Approval")
+        lines.append(f"## {len(sections) + 5}. Approval")
         lines.append("")
         lines.append("| Role | Name | Date |")
         lines.append("| --- | --- | --- |")
@@ -551,8 +643,12 @@ class DocumentBuilder:
             "owner_role": orole,
             "classification": classification,
             "revision": rev,
-            "effective": eff.isoformat(),
+            "effective": eff.isoformat() if date_source != "unknown" else None,
+            "date_source": date_source,
+            "authoritative_date": authoritative,
+            "thin": thin,
             "review": review.isoformat(),
+            "sections": len(sections),
             "refs": refs,
             "entities": sorted(entities),
             "instances": [i.id for i in cited],

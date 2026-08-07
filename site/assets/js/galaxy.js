@@ -135,9 +135,18 @@
 
   class Galaxy {
     constructor(canvas, opts) {
+      // Label layer. Nova draws a name on every node, and that single feature
+      // is most of why its graph is usable — an unlabelled particle cloud is
+      // pretty and tells a viewer nothing about what they are looking at.
+      //
+      // Labels are HTML rather than sprite textures: 460 canvas textures cost
+      // memory and render blurry under DPR scaling, whereas projecting node
+      // positions and moving absolutely-positioned divs gives crisp text at
+      // any zoom for the price of one transform per visible label.
+      this.labels = null;
       this.canvas = canvas;
       this.opts = Object.assign({
-        maxNodes: 460,
+        maxNodes: 300,
         onHover: null,
         onSelect: null,
         autorotate: 0.00035,
@@ -154,7 +163,18 @@
       this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       this._initGL();
+      this._initLabels();
       this._bind();
+    }
+
+    _initLabels() {
+      const host = this.canvas.parentElement;
+      if (!host) return;
+      const layer = document.createElement('div');
+      layer.className = 'glabels';
+      host.appendChild(layer);
+      this.labels = layer;
+      this._labelPool = [];
     }
 
     _initGL() {
@@ -227,7 +247,9 @@
           z: (Math.random() - 0.5) * 380,
           vx: 0, vy: 0, vz: 0,
           glow: 0, tier: 0, alpha: 1, sizeMul: 1,
-          tAlpha: 1, tSize: 1
+          tAlpha: 1, tSize: 1,
+          baseSize: (KIND_SIZE[n.kind] || DEFAULT_INSTANCE_SIZE) *
+                    (1 + Math.min(n.degree, 30) / 52)
         };
         this.byId.set(n.id, v);
         return v;
@@ -251,7 +273,7 @@
 
       if (accentHex) this.accent = new THREE.Color(accentHex);
       this._buildMeshes();
-      this._settle(300);
+      this._settle(360);
 
       // Frame to content rather than to a constant. The composite overview
       // graph is several times the extent of a single tenant's.
@@ -278,8 +300,6 @@
       this.nodes.forEach((n, i) => {
         const c = KIND_COLOR[n.kind] || [0.6, 0.7, 0.9];
         tint[i * 3] = c[0]; tint[i * 3 + 1] = c[1]; tint[i * 3 + 2] = c[2];
-        n.baseSize = (KIND_SIZE[n.kind] || DEFAULT_INSTANCE_SIZE) *
-                     (1 + Math.min(n.degree, 30) / 52);
         size[i] = n.baseSize;
         glow[i] = 0;
       });
@@ -325,7 +345,7 @@
     _tick() {
       const nodes = this.nodes, n = nodes.length;
       if (!n) return;
-      const REP = 7400, SPRING = 0.0125, LEN = 128, CENTRE = 0.0011, DAMP = 0.86;
+      const REP = 8200, SPRING = 0.0120, LEN = 146, CENTRE = 0.0009, DAMP = 0.84;
       const sample = Math.min(n, 90);
 
       for (let i = 0; i < n; i++) {
@@ -341,6 +361,25 @@
           a.vx += dx / d * f; a.vy += dy / d * f; a.vz += dz / d * f;
         }
         a.vx -= a.x * CENTRE; a.vy -= a.y * CENTRE; a.vz -= a.z * CENTRE;
+      }
+
+      // Overlap avoidance. A short-range hard push that only acts when two
+      // nodes are closer than their combined radii, so it separates the core
+      // without inflating the whole layout.
+      for (let i = 0; i < n; i++) {
+        const a = nodes[i];
+        for (let s2 = 0; s2 < 14; s2++) {
+          const b = nodes[(Math.random() * n) | 0];
+          if (a === b) continue;
+          const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+          const minD = (a.baseSize + b.baseSize) * 0.5 + 14;
+          if (d < minD) {
+            const push = (minD - d) / d * 0.55;
+            a.vx += dx * push; a.vy += dy * push; a.vz += dz * push;
+            b.vx -= dx * push; b.vy -= dy * push; b.vz -= dz * push;
+          }
+        }
       }
 
       for (const e of this.edges) {
@@ -623,6 +662,113 @@
       }, { passive: false });
     }
 
+    /**
+     * Position labels for the nodes worth naming.
+     *
+     * Showing all 460 at once is unreadable, so the set is chosen by relevance:
+     * every activated node always gets a label, then the highest-degree nodes
+     * fill the remaining budget. During a query that means the lit subgraph is
+     * named and everything else recedes, which is exactly the question a viewer
+     * is asking.
+     */
+    _syncLabels() {
+      if (!this.labels || !this.nodes.length) return;
+      const THREE = global.THREE;
+      const r = this.canvas.getBoundingClientRect();
+      if (!r.width) return;
+
+      const anyActive = this.active.size > 0;
+      const budget = r.width < 760 ? 10 : (anyActive ? 18 : 16);
+
+      const cands = [];
+      const v = new THREE.Vector3();
+      for (const n of this.nodes) {
+        if (this.hidden.has(n.kind)) continue;
+        if (anyActive && n.tier === 0) continue;
+        v.set(n.x, n.y, n.z).applyMatrix4(this.root.matrixWorld).project(this.camera);
+        if (v.z > 1 || v.x < -1.05 || v.x > 1.05 || v.y < -1.05 || v.y > 1.05) continue;
+        const priority = (n.tier === 2 ? 1e6 : n.tier === 1 ? 1e3 : 0) + n.degree;
+        const sy = (-v.y * 0.5 + 0.5) * r.height;
+        cands.push({
+          n, priority,
+          sx: (v.x * 0.5 + 0.5) * r.width,
+          sy,
+          // Collide on where the label will actually be drawn, not on the
+          // node's projected centre.
+          ly: sy - 16 - n.baseSize * n.sizeMul * 0.22,
+          depth: v.z,
+        });
+      }
+      cands.sort((a, b) => b.priority - a.priority);
+
+      // Screen-space collision rejection. Overlapping labels are worse than
+      // fewer labels — they are unreadable AND they hide the graph.
+      const placed = [];
+      const shown = [];
+      for (const c of cands) {
+        if (shown.length >= budget) break;
+        const w = Math.min(150, 7.2 * c.n.label.length + 14);
+        let clash = false;
+        for (const p of placed) {
+          if (Math.abs(c.sx - p.sx) < (w + p.w) * 0.5 + 8 &&
+              Math.abs(c.ly - p.ly) < 26) {
+            clash = true; break;
+          }
+        }
+        if (clash) continue;
+        placed.push({ sx: c.sx, ly: c.ly, w });
+        shown.push(c);
+      }
+
+      while (this._labelPool.length < shown.length) {
+        const el = document.createElement('span');
+        el.className = 'glabel';
+        el.addEventListener('click', () => {
+          const d = el._node;
+          if (d && this.opts.onSelect) this.opts.onSelect(d);
+        });
+        this.labels.appendChild(el);
+        this._labelPool.push(el);
+      }
+
+      this._labelPool.forEach((el, i) => {
+        const c = shown[i];
+        if (!c) { el.style.display = 'none'; return; }
+        el.style.display = 'block';
+        el._node = c.n;
+        const text = c.n.label.length > 26 ? c.n.label.slice(0, 25) + '\u2026' : c.n.label;
+        if (el.textContent !== text) el.textContent = text;
+        el.className = 'glabel' + (c.n.tier === 2 ? ' on' : c.n.tier === 1 ? ' near' : '');
+        el.style.transform =
+          `translate(-50%,-50%) translate(${c.sx.toFixed(1)}px, ${c.ly.toFixed(1)}px)`;
+        // Fade with depth so far labels do not compete with near ones.
+        el.style.opacity = (1 - Math.max(0, Math.min(0.62, (c.depth - 0.2) * 1.4))).toFixed(2);
+      });
+    }
+
+    /**
+     * Frame the camera on a set of nodes.
+     *
+     * Nova refits after activation so the lit subgraph fills the viewport.
+     * Without it a user has to hunt for what changed, which defeats the point
+     * of highlighting.
+     */
+    fitTo(ids) {
+      const list = (ids && ids.length)
+        ? ids.map(i => this.byId.get(i)).filter(Boolean)
+        : this.nodes;
+      if (!list.length) return;
+      let cx = 0, cy = 0, cz = 0;
+      for (const n of list) { cx += n.x; cy += n.y; cz += n.z; }
+      cx /= list.length; cy /= list.length; cz /= list.length;
+      let rad = 0;
+      for (const n of list) {
+        rad = Math.max(rad, Math.hypot(n.x - cx, n.y - cy, n.z - cz));
+      }
+      this.flyTarget = { x: cx, y: cy, z: cz };
+      this.flyDist = Math.max(240, Math.min(1400, rad * 2.6 + 180));
+    }
+
     resize() {
       const r = this.canvas.getBoundingClientRect();
       if (!r.width || !r.height) return;
@@ -663,15 +809,30 @@
 
       const cx = Math.cos(this.rot.x), sx = Math.sin(this.rot.x);
       const cy = Math.cos(this.rot.y), sy = Math.sin(this.rot.y);
+      // Ease toward the framing target rather than cutting, so the viewer can
+      // follow where the camera went.
+      this.target = this.target || { x: 0, y: 0, z: 0 };
+      if (this.flyTarget) {
+        this.target.x += (this.flyTarget.x - this.target.x) * 0.07;
+        this.target.y += (this.flyTarget.y - this.target.y) * 0.07;
+        this.target.z += (this.flyTarget.z - this.target.z) * 0.07;
+      }
+      if (this.flyDist) this.dist += (this.flyDist - this.dist) * 0.07;
+
       this.camera.position.set(
-        this.dist * cx * sy,
-        this.dist * sx,
-        this.dist * cx * cy
+        this.target.x + this.dist * cx * sy,
+        this.target.y + this.dist * sx,
+        this.target.z + this.dist * cx * cy
       );
-      this.camera.lookAt(0, 0, 0);
+      this.camera.lookAt(this.target.x, this.target.y, this.target.z);
 
       this.stars.rotation.y += 0.00006;
       this.renderer.render(this.scene, this.camera);
+
+      // Labels are throttled; re-projecting 460 nodes every frame is wasted
+      // work when the camera moves a fraction of a degree between frames.
+      this._lf = (this._lf || 0) + 1;
+      if (this._lf % 3 === 0) this._syncLabels();
     }
   }
 

@@ -72,7 +72,7 @@ class DateSpread:
     def draw(self) -> dt.date:
         for _ in range(12):
             # Exponential recency bias: most mass in the last third.
-            u = self.rng.random() ** 1.9
+            u = self.rng.random() ** 1.25
             day = self.end - dt.timedelta(days=int(u * self.span))
             if self.rng.random() < seasonal_weight(day, self.peak_month) / 1.5:
                 return day

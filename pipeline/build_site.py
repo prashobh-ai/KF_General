@@ -502,17 +502,29 @@ def build_demo(m: dict) -> str:
         <div class="eyebrow rise">Knowledge health</div>
         <h2 class="rise">Find the gaps before they cost you.</h2>
         <p class="lede rise" style="margin-top:1rem">
-          Knowledge that sits in one document, that nobody owns, or that nothing
-          else references is a risk you cannot see on a shared drive. Each score
-          below is measured from the corpus and names its own remediation.
+          Knowledge that sits in one document, that nobody can date, or that
+          extraction has turned to debris is a risk you cannot see on a shared
+          drive. Every score below is measured from the corpus — click any card
+          to see the formula and the raw inputs behind it.
         </p>
       </div>
-      <div class="grid" style="grid-template-columns:minmax(200px,240px) 1fr;gap:2rem;align-items:start">
-        <div class="card rise"><div class="card-pad center">
-          <div class="ring" id="healthRing"></div>
-        </div></div>
+      <div class="grid" style="grid-template-columns:minmax(260px,320px) 1fr;gap:2.2rem;align-items:start">
+        <div class="rise">
+          <div class="card"><div class="card-pad center">
+            <div id="healthRing"></div>
+          </div></div>
+          <div class="card" style="margin-top:1rem"><div class="card-pad">
+            <div id="healthSummary"></div>
+          </div></div>
+        </div>
         <div class="grid g2" id="healthDims"></div>
       </div>
+
+      <div class="section-head rise" style="margin:3.2rem 0 1.4rem">
+        <div class="eyebrow">Where the risk sits</div>
+        <h3>Four exposures, counted rather than estimated.</h3>
+      </div>
+      <div class="grid g4" id="healthRisks"></div>
     </div>
   </section>
 
@@ -526,6 +538,7 @@ def build_demo(m: dict) -> str:
         <button class="on" data-tab="types">Document types</button>
         <button data-tab="units">Units</button>
         <button data-tab="hubs">Graph hubs</button>
+        <button data-tab="clusters">Clusters</button>
         <button data-tab="concepts">Concepts</button>
         <button data-tab="timeline">Timeline</button>
         <button data-tab="model">Domain model</button>
@@ -534,6 +547,7 @@ def build_demo(m: dict) -> str:
         <div class="panel on" data-panel-group="ins" data-panel="types" id="insDocTypes"></div>
         <div class="panel" data-panel-group="ins" data-panel="units" id="insUnits"></div>
         <div class="panel" data-panel-group="ins" data-panel="hubs" id="insHubs"></div>
+        <div class="panel" data-panel-group="ins" data-panel="clusters" id="insDendro"></div>
         <div class="panel" data-panel-group="ins" data-panel="concepts" id="insConcepts"></div>
         <div class="panel" data-panel-group="ins" data-panel="timeline" id="insTimeline"></div>
         <div class="panel" data-panel-group="ins" data-panel="model">
@@ -652,7 +666,8 @@ def main() -> None:
         dst.mkdir(parents=True, exist_ok=True)
 
         for name in ("graph.json", "index.json", "health.json",
-                     "insights.json", "documents.json", "semantic.json"):
+                     "insights.json", "documents.json", "semantic.json",
+                     "dendrogram.json"):
             shutil.copyfile(src / "fabric" / name, dst / name)
         shutil.copyfile(src / "tenant.json", dst / "tenant.json")
         # Document bodies are NOT copied. The viewer reconstructs them from the

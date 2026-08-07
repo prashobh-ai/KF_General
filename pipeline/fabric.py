@@ -20,6 +20,7 @@ health   Metrics that answer "where is our knowledge weak?" — single-sourced
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 import re
 from collections import Counter, defaultdict
@@ -327,97 +328,266 @@ def build_graph(pack: Pack, docs: list[dict], world=None, world_rels=None) -> di
 # Knowledge health
 # ---------------------------------------------------------------------------
 
-def build_health(docs: list[dict], graph: dict, today: str = "2026-05-31") -> dict:
-    """Score the corpus on dimensions a knowledge owner can act on.
+def build_health(docs: list[dict], graph: dict, passages: list[dict],
+                 today: str = "2026-05-31") -> dict:
+    """Score the corpus on five measures a knowledge owner can act on.
 
-    Each metric names a specific remediation. A score with no action attached
-    is decoration.
+    Every metric states its formula and its raw inputs, because a score without
+    a derivation is a number someone has to take on trust — and the first
+    question a technical reviewer asks is "how did you get that?".
+
+    Bands are deliberately demanding. A corpus that scores 90 on everything has
+    told you nothing about where to spend effort next.
     """
+    from .textnorm import passage_quality
+
     total = len(docs)
-    by_subject: dict[str, list[str]] = defaultdict(list)
-    for d in docs:
-        by_subject[d["subject"]].append(d["id"])
+    if not total:
+        return {"overall": 0, "metrics": [], "risks": [], "counts": {}}
 
-    cited = set()
-    for d in docs:
-        cited.update(d["refs"])
+    today_d = dt.date.fromisoformat(today)
 
-    orphans = [d["id"] for d in docs if d["id"] not in cited]
-    single = [s for s, ids in by_subject.items() if len(ids) == 1]
-    stale = [d["id"] for d in docs if d["review"] < today]
-    unowned = [d["id"] for d in docs if not d.get("owner")]
+    # ---- shared inputs ---------------------------------------------------
+    by_doc_passages: Counter = Counter(p["doc"] for p in passages)
+    entity_docs: dict[str, set] = defaultdict(set)
+    for n in graph["nodes"]:
+        for d in n.get("docs", []):
+            entity_docs[n["id"]].add(d)
+    entities = {k: v for k, v in entity_docs.items() if v}
 
-    # Coverage: how evenly the corpus spans its own organisational units.
-    unit_counts = Counter(d["unit"] for d in docs)
-    n_units = len(unit_counts)
-    if n_units:
-        ideal = total / n_units
-        spread = 1 - min(1.0, sum(abs(c - ideal) for c in unit_counts.values())
-                         / (2 * total))
+    quality = [passage_quality(p["text"]) for p in passages]
+    sentences = sum(q["sentences"] for q in quality)
+    prose = sum(q["prose"] for q in quality)
+    debris_counts: Counter = Counter()
+    for q in quality:
+        for k, v in q["counts"].items():
+            if k != "prose":
+                debris_counts[k] += v
+
+    dated = [d for d in docs if d.get("effective")]
+    authoritative = [d for d in docs if d.get("authoritative_date")]
+    undated = [d for d in docs if not d.get("effective")]
+
+    def band(v: float) -> str:
+        return "strong" if v >= 75 else "fair" if v >= 50 else "weak"
+
+    metrics = []
+
+    # ---- 1. Depth --------------------------------------------------------
+    # A mean saturates: one richly-documented procedure hides ten stubs, and
+    # every tenant then scores 100. What a knowledge owner needs to know is how
+    # much of the estate is too thin to answer from, so we score the share of
+    # documents that clear the threshold rather than the average across them.
+    TARGET_PASSAGES = 8
+    mean_pass = sum(by_doc_passages.values()) / total
+    deep = [d for d in docs if by_doc_passages.get(d["id"], 0) >= TARGET_PASSAGES]
+    v = len(deep) / total * 100
+    metrics.append({
+        "key": "depth", "label": "Depth", "value": round(v, 1), "band": band(v),
+        "what": "How much usable material each document contributes.",
+        "risk": "Thin documents give the system only one place to look, so "
+                "answers get shallower.",
+        "formula": "documentsWith(>=8 passages) / documents x 100",
+        "inputs": {
+            "documents": total,
+            "passages": len(passages),
+            "meanPassagesPerDocument": round(mean_pass, 1),
+            "documentsAtOrAboveTarget": len(deep),
+            "target": TARGET_PASSAGES,
+            "thinDocuments": total - len(deep),
+        },
+        "note": "How much retrievable material exists per document.",
+    })
+
+    # ---- 2. Connectedness -------------------------------------------------
+    # Organisational scaffolding — units, systems, authorities, roles — is
+    # attached to nearly every document by construction, so counting it makes
+    # connectedness read 100 on any corpus whatsoever. The question is whether
+    # SUBJECT MATTER recurs across documents, so the measure runs over topical
+    # and instance entities only.
+    STRUCTURAL = {"unit", "system", "authority", "role", "site", "doctype"}
+    kind_of = {n["id"]: n["kind"] for n in graph["nodes"]}
+    topical = {k: v_ for k, v_ in entities.items()
+               if kind_of.get(k) not in STRUCTURAL}
+    cross = [k for k, v_ in topical.items() if len(v_) >= 2]
+    raw = len(cross) / max(1, len(topical))
+    # Reported as the raw share rather than normalised against a "healthy"
+    # threshold. Nova divides by 0.35, which is calibrated to a corpus of PDFs
+    # where cross-document recurrence is genuinely rare; on this corpus that
+    # normalisation pins every tenant at 100 and the metric stops saying
+    # anything. The unnormalised share is also directly readable: 68 means 68%
+    # of concepts appear in more than one document.
+    v = raw * 100
+    metrics.append({
+        "key": "connectedness", "label": "Connectedness", "value": round(v, 1),
+        "band": band(v),
+        "what": "How often the same topic appears across different documents.",
+        "risk": "Disconnected documents mean questions spanning two of them "
+                "cannot be answered at all.",
+        "formula": "topicalEntitiesIn(>=2 documents) / topicalEntities x 100",
+        "inputs": {
+            "topicalEntities": len(topical),
+            "crossDocumentEntities": len(cross),
+            "structuralEntitiesExcluded": len(entities) - len(topical),
+            "rawRatio": f"{raw * 100:.1f}%",
+            "referenceThreshold": "35% is healthy for a PDF-derived estate",
+        },
+        "note": "Share of concepts that appear in more than one document — the "
+                "actual measure of whether this is a fabric or a pile of files.",
+    })
+
+    # ---- 3. Traceability --------------------------------------------------
+    v = (len(dated) + len(authoritative)) / (2 * total) * 100
+    by_method = Counter(d.get("date_source", "unknown") for d in docs)
+    metrics.append({
+        "key": "traceability", "label": "Traceability", "value": round(v, 1),
+        "band": band(v),
+        "what": "Whether we can tell when each document is from, and how we know.",
+        "risk": "Without dates you cannot tell a current revision from a "
+                "withdrawn one.",
+        "formula": "(documentsWithAnyDate + documentsWithAuthoritativeDate) / "
+                   "(2 x documents) x 100",
+        "inputs": {
+            "documents": total,
+            "withDate": len(dated),
+            "authoritative": len(authoritative),
+            "byMethod": dict(by_method),
+        },
+        "note": "An authoritative source — an approved revision stamp — counts "
+                "double against a system timestamp, because only one of them "
+                "survives a challenge.",
+    })
+
+    # ---- 4. Readability ---------------------------------------------------
+    v = (prose / sentences * 100) if sentences else 0.0
+    metrics.append({
+        "key": "readability", "label": "Readability", "value": round(v, 1),
+        "band": band(v),
+        "what": "How much of the text is clean prose rather than table debris.",
+        "risk": "Debris produces answers that look confident and read as "
+                "nonsense.",
+        "formula": "mean(perPassageProseQuality) x 100, from build-time "
+                   "sentence classification",
+        "inputs": {
+            "passagesMeasured": len(passages),
+            "sentences": sentences,
+            "proseSentences": prose,
+            "prosePercent": f"{v:.1f}%",
+        },
+        "note": "How much of the indexed text is usable prose rather than table "
+                "fragments, running headers and equations.",
+    })
+
+    # ---- 5. Currency ------------------------------------------------------
+    FRESH, STALE = 730, 2190
+    ages = sorted((today_d - dt.date.fromisoformat(d["effective"])).days
+                  for d in dated)
+    if ages:
+        mid = len(ages) // 2
+        median_age = ages[mid] if len(ages) % 2 else (ages[mid - 1] + ages[mid]) / 2
+        v = max(0.0, min(1.0, 1 - (median_age - FRESH) / (STALE - FRESH))) * 100
     else:
-        spread = 0.0
+        median_age, v = 0, 0.0
+    metrics.append({
+        "key": "currency", "label": "Currency", "value": round(v, 1),
+        "band": band(v),
+        "what": "How recent the maintained documents are.",
+        "risk": "Out-of-date documentation is a compliance exposure, not just a "
+                "quality one.",
+        "formula": "1 - (medianAgeDays - 730) / (2190 - 730), clamped to [0,1]",
+        "inputs": {
+            "datedDocuments": len(dated),
+            "undatedDocuments": len(undated),
+            "medianAgeDays": int(median_age),
+            "medianAgeYears": round(median_age / 365.25, 1),
+            "freshWindowDays": FRESH,
+            "staleAtDays": STALE,
+        },
+        "note": "Median age of documents we can date. Undated documents are "
+                "excluded rather than assumed old — assuming would inflate the "
+                "problem and hide the real one, which is that they are undated.",
+    })
 
-    def pct(n: int) -> float:
-        return round(100 * (1 - n / total), 1) if total else 0.0
+    # ---- risk register ----------------------------------------------------
+    debris = sum(debris_counts.values())
+    singletons = [k for k, v_ in topical.items() if len(v_) <= 1]
+    linked_docs = set()
+    for v_ in entities.values():
+        if len(v_) >= 2:
+            linked_docs |= v_
+    isolated = [d["id"] for d in docs if d["id"] not in linked_docs]
 
-    dimensions = [
+    risks = [
         {
-            "key": "sourcing",
-            "name": "Corroboration",
-            "score": pct(len(single)),
-            "detail": f"{len(single)} subjects appear in exactly one document.",
-            "action": "Cross-document corroboration reduces single points of failure. "
-                      "Add a second authoritative source for these subjects.",
-            "items": single[:12],
+            "label": "extraction debris",
+            "value": f"{debris / max(sentences, 1) * 100:.0f}%",
+            "detail": f"{debris} of {sentences} sentences classified as table, "
+                      f"header, equation or legal text",
+            "how": "build-time sentence classifier (pipeline/textnorm.py)",
+            "why": "These are indexed but excluded from answers. A high share "
+                   "means the source documents are layout-heavy and retrieval "
+                   "has less to work with.",
+            "breakdown": dict(debris_counts),
         },
         {
-            "key": "connectivity",
-            "name": "Connectivity",
-            "score": pct(len(orphans)),
-            "detail": f"{len(orphans)} documents are referenced by nothing else.",
-            "action": "Orphans are invisible in navigation. Link them from an "
-                      "index or parent procedure.",
-            "items": orphans[:12],
+            "label": "singleton concepts",
+            "value": len(singletons),
+            "detail": f"{len(singletons)} of {len(entities)} entities appear in "
+                      f"exactly one document",
+            "how": "count(entity.documents <= 1)",
+            "why": "A concept described in one place disappears if that "
+                   "document is revised or withdrawn.",
+            "items": [graph_label(graph, k) for k in singletons[:10]],
         },
         {
-            "key": "currency",
-            "name": "Currency",
-            "score": pct(len(stale)),
-            "detail": f"{len(stale)} documents are past their review date.",
-            "action": "Route to the document owner for review or formal extension.",
-            "items": stale[:12],
+            "label": "isolated documents",
+            "value": len(isolated),
+            "detail": f"{len(isolated)} of {total} documents share no entity "
+                      f"with any other document",
+            "how": "documents absent from every multi-document entity",
+            "why": "Nothing links these into the fabric. They can only ever "
+                   "answer questions that name them directly.",
+            "items": isolated[:10],
         },
         {
-            "key": "ownership",
-            "name": "Ownership",
-            "score": pct(len(unowned)),
-            "detail": f"{len(unowned)} documents have no named owner.",
-            "action": "Unowned documents cannot be maintained. Assign an accountable role.",
-            "items": unowned[:12],
-        },
-        {
-            "key": "coverage",
-            "name": "Unit coverage",
-            "score": round(spread * 100, 1),
-            "detail": f"Documentation spans {n_units} organisational units.",
-            "action": "Units with thin coverage carry undocumented practice. "
-                      "Prioritise the lightest for authoring.",
-            "items": [u for u, _ in unit_counts.most_common()[-6:]],
+            "label": "undated documents",
+            "value": len(undated),
+            "detail": f"{len(undated)} of {total} documents have no recoverable date",
+            "how": "date resolution failed across revision stamp, system "
+                   "timestamp and body text",
+            "why": "Supersession cannot be checked. An answer may be quoting a "
+                   "withdrawn revision with no way to tell.",
+            "items": [d["id"] for d in undated[:10]],
         },
     ]
 
-    overall = round(sum(d["score"] for d in dimensions) / len(dimensions), 1)
+    overall = round(sum(m["value"] for m in metrics) / len(metrics), 1)
+    strongest = max(metrics, key=lambda m: m["value"])
+    weakest = min(metrics, key=lambda m: m["value"])
+
     return {
         "overall": overall,
-        "dimensions": dimensions,
+        "metrics": metrics,
+        "risks": risks,
+        "strongest": f"Strongest: {strongest['label'].lower()} — "
+                     f"{strongest['what'][0].lower()}{strongest['what'][1:]}",
+        "weakest": f"Needs attention: {weakest['label'].lower()}. {weakest['risk']}",
         "counts": {
             "documents": total,
-            "entities": len(graph["nodes"]),
+            "passages": len(passages),
+            "entities": len(entities),
             "relationships": len(graph["edges"]),
-            "orphans": len(orphans),
-            "stale": len(stale),
+            "isolated": len(isolated),
+            "undated": len(undated),
         },
     }
+
+
+def graph_label(graph: dict, node_id: str) -> str:
+    for n in graph["nodes"]:
+        if n["id"] == node_id:
+            return n["label"]
+    return node_id
 
 
 def build_insights(pack: Pack, docs: list[dict], graph: dict,
@@ -428,7 +598,10 @@ def build_insights(pack: Pack, docs: list[dict], graph: dict,
     by_class = Counter(d["classification"] for d in docs)
     by_month: Counter = Counter()
     for d in docs:
-        by_month[d["effective"][:7]] += 1
+        # Undated documents are a real category now, not a defect. They are
+        # excluded from the timeline rather than assumed to be from any date.
+        if d.get("effective"):
+            by_month[d["effective"][:7]] += 1
 
     # ---------------------------------------------------------------
     # Concept extraction.
