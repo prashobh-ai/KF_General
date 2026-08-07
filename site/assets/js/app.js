@@ -13,7 +13,7 @@
   const SLUG = document.body.dataset.tenant;
   const BASE = document.body.dataset.base || '../../';
 
-  let bundle, engine, galaxy, current = null;
+  let bundle, engine, galaxy, typeahead, current = null;
 
   // ---------------------------------------------------------------------------
   // Scroll reveal
@@ -48,7 +48,7 @@
 
   async function boot() {
     const root = `${BASE}data/${SLUG}`;
-    const [manifest, graph, index, documents, health, insights, semantic, dendrogram] = await Promise.all([
+    const [manifest, graph, index, documents, health, insights, semantic, dendrogram, questions] = await Promise.all([
       fetch(`${root}/tenant.json`).then(r => r.json()),
       fetch(`${root}/graph.json`).then(r => r.json()),
       fetch(`${root}/index.json`).then(r => r.json()),
@@ -59,10 +59,13 @@
       // means vocabulary-mismatch queries degrade to BM25 rather than the
       // whole page dying.
       fetch(`${root}/semantic.json`).then(r => r.json()).catch(() => ({ enabled: false })),
-      fetch(`${root}/dendrogram.json`).then(r => r.json()).catch(() => ({ enabled: false }))
+      fetch(`${root}/dendrogram.json`).then(r => r.json()).catch(() => ({ enabled: false })),
+      // The measured question bank. Failing soft drops back to the
+      // pack-authored questions rather than leaving the page with no prompts.
+      fetch(`${root}/questions.json`).then(r => r.json()).catch(() => null)
     ]);
 
-    bundle = { manifest, graph, index, documents, health, insights, semantic, dendrogram };
+    bundle = { manifest, graph, index, documents, health, insights, semantic, dendrogram, questions };
     engine = new Engine(bundle);
 
     document.documentElement.style.setProperty('--accent', manifest.accent);
@@ -71,6 +74,7 @@
     initGalaxy();
     renderStats();
     renderSuggestions();
+    setupTypeahead();
     renderHealth();
     renderInsights();
     renderDendrogram();
@@ -111,6 +115,11 @@
     });
 
     galaxy.setGraph(bundle.graph, bundle.manifest.accent);
+    // Test hooks. The graph's behaviour under activation — which nodes moved
+    // tier, whether the camera reframed, whether unrelated edges were dimmed
+    // rather than deleted — is invisible from the DOM, so an end-to-end test
+    // cannot assert any of it without a handle on the instance.
+    window.__kfGalaxy = galaxy;
     window.addEventListener('resize', () => galaxy.resize());
 
     // Legend doubles as a filter — the only way to read a dense graph is to
@@ -147,15 +156,43 @@
     });
   }
 
+  // The five chips are the MEASURED best, not the hand-authored set.
+  //
+  // questions.json is produced by eval/build_bank.mjs, which runs every
+  // candidate through this same Engine and keeps only those clearing the
+  // confidence bar while citing more than one document. The five shown are the
+  // top scorer from five DIFFERENT question families, so the first thing a
+  // viewer clicks demonstrates the system reading the question rather than
+  // matching one phrasing repeatedly.
+  //
+  // Falls back to the pack-authored questions if the bank is missing, so a
+  // partial build degrades to something rather than an empty rail.
   function renderSuggestions() {
     const box = $('#suggest');
-    box.innerHTML = bundle.manifest.questions.map(q =>
+    const qs = (bundle.questions && bundle.questions.top && bundle.questions.top.length)
+      ? bundle.questions.top
+      : (bundle.manifest.questions || []);
+    box.innerHTML = qs.map(q =>
       `<button class="chip" data-q="${esc(q)}"><span class="dot"></span>${esc(q)}</button>`
     ).join('');
     $$('.chip', box).forEach(b => b.addEventListener('click', () => {
       $('#q').value = b.dataset.q;
       ask(b.dataset.q);
     }));
+  }
+
+  // The typeahead is backed by the FULL bank, not just the five on screen —
+  // roughly ninety tested questions per tenant. A reviewer who starts typing is
+  // steered onto one of them instead of inventing a query the corpus cannot
+  // support and concluding the retrieval is weak.
+  function setupTypeahead() {
+    const input = $('#q');
+    if (!input || typeof Typeahead === 'undefined') return;
+    const bank = (bundle.questions && bundle.questions.bank && bundle.questions.bank.length)
+      ? bundle.questions.bank
+      : (bundle.manifest.questions || []);
+    typeahead = new Typeahead(input, bank, q => ask(q));
+    window.__kfBank = bank;
   }
 
   // ---------------------------------------------------------------------------

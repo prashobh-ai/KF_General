@@ -29,6 +29,15 @@
     BASE:     [0.62, 0.68, 0.78],   // muted slate
   };
 
+  // Edge alphas, per Nova's highlight model. The spread between ACTIVE and DIM
+  // is what carries the activation across a room; a gentler ratio reads as
+  // "some edges are slightly bluer" rather than "these are the ones".
+  const EDGE_REST     = [0.55, 0.62, 0.74];
+  const EDGE_A_REST   = 0.30;   // at rest the fabric is visible but recessive
+  const EDGE_A_ACTIVE = 0.90;   // both ends fired — the traversed path
+  const EDGE_A_NEAR   = 0.45;   // one end fired — the frontier reached
+  const EDGE_A_DIM    = 0.04;   // unrelated — present, but only just
+
   const KIND_COLOR = {
     unit:      [0.15, 0.55, 1.00],
     system:    [0.00, 0.72, 0.96],
@@ -330,12 +339,21 @@
 
       const E = this.edges.length;
       const lp = new Float32Array(E * 6);
-      const lc = new Float32Array(E * 6);
+      // FOUR components per vertex, not three. r128 enables `vertexAlphas` when
+      // the colour attribute is itemSize 4, which gives every edge its own
+      // opacity in a single draw call. With a 3-component buffer the only alpha
+      // control is material.opacity — one value for all edges — and per-edge
+      // dimming is then impossible. That limitation is why unrelated edges used
+      // to be teleported off-screen instead of dimmed: deletion was the only
+      // available approximation of "recede". Nova dims them to 0.04 and keeps
+      // them on the canvas, so the fabric stays visible and the lit subgraph
+      // reads as brightness against it rather than as the only thing that exists.
+      const lc = new Float32Array(E * 8);
       const lg = new THREE.BufferGeometry();
       lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
-      lg.setAttribute('color', new THREE.BufferAttribute(lc, 3));
+      lg.setAttribute('color', new THREE.BufferAttribute(lc, 4));
       this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
-        vertexColors: true, transparent: true, opacity: 0.55,
+        vertexColors: true, transparent: true, opacity: 1,
         depthWrite: false, blending: THREE.NormalBlending
       }));
       this.root.add(this.lines);
@@ -444,45 +462,37 @@
       const la = this.lines.geometry.attributes.position.array;
       const lc = this.lines.geometry.attributes.color.array;
       this.edges.forEach((e, i) => {
-        // While a question is active, edges outside the activated subgraph are
-        // not drawn at all.
+        // Unrelated edges are DIMMED, not removed.
         //
-        // Fading them was not enough: a thousand strokes at 3% each still
-        // accumulate into a dark scribble on white, and the handful of edges
-        // that answer the question disappear inside it. Removing them entirely
-        // is the only thing that makes the activated relations prominent —
-        // which is the whole purpose of the highlight.
-        const offGraph = anyActive && !(this.activeEdges && this.activeEdges.has(i));
-        const hid = this.hidden.has(e.s.kind) || this.hidden.has(e.t.kind) || offGraph;
-        const o = i * 6;
-        if (hid) { for (let k = 0; k < 6; k++) la[o + k] = 100000; }
+        // They used to be teleported off-screen, which made activation legible
+        // but destroyed the thing the picture is for: without the surrounding
+        // fabric there is no scale against which the lit region reads as small
+        // and specific. Nova keeps every edge on the canvas and drops unrelated
+        // ones to 0.04 alpha, so the answer looks like a path found THROUGH a
+        // corpus rather than a corpus that only ever contained the path.
+        const hid = this.hidden.has(e.s.kind) || this.hidden.has(e.t.kind);
+        const o6 = i * 6, o8 = i * 8;
+        if (hid) { for (let k = 0; k < 6; k++) la[o6 + k] = 100000; }
         else {
-          la[o] = e.s.x; la[o + 1] = e.s.y; la[o + 2] = e.s.z;
-          la[o + 3] = e.t.x; la[o + 4] = e.t.y; la[o + 5] = e.t.z;
+          la[o6] = e.s.x; la[o6 + 1] = e.s.y; la[o6 + 2] = e.s.z;
+          la[o6 + 3] = e.t.x; la[o6 + 4] = e.t.y; la[o6 + 5] = e.t.z;
         }
-        // An edge is active only when BOTH ends are in the activated set —
-        // that is what makes the lit subgraph read as a connected path rather
-        // than a spray of highlighted dots.
-        let cs, ct;
+
+        // Three tiers, mirroring the node tiers so edge and node agree about
+        // what fired: both ends active is the traversed path; one end active is
+        // the frontier reached from it; neither is background fabric.
+        let c, a;
         if (!anyActive) {
-          cs = ct = [0.84, 0.89, 0.95];
+          c = EDGE_REST; a = EDGE_A_REST;
         } else {
-          // An edge touching an activated node is drawn red: requiring BOTH
-          // ends to be active made almost no edge qualify, so the lit nodes
-          // floated unconnected and the path through the graph was invisible.
           const both = e.s.tier === 2 && e.t.tier === 2;
           const touching = this.activeEdges && this.activeEdges.has(i);
-          if (both) { cs = ct = TIER.ACTIVE; }
-          else if (touching) { cs = ct = [0.55, 0.76, 0.96]; }
-          else {
-            // Unrelated edges fade almost to the page. Nova pushed these to
-            // 0.04 opacity for exactly this reason: without an aggressive
-            // fade the activation is invisible from across a room.
-            cs = ct = [0.972, 0.978, 0.986];
-          }
+          if (both)          { c = TIER.ACTIVE;  a = EDGE_A_ACTIVE; }
+          else if (touching) { c = TIER.RELATED; a = EDGE_A_NEAR; }
+          else               { c = EDGE_REST;    a = EDGE_A_DIM; }
         }
-        lc[o] = cs[0]; lc[o + 1] = cs[1]; lc[o + 2] = cs[2];
-        lc[o + 3] = ct[0]; lc[o + 4] = ct[1]; lc[o + 5] = ct[2];
+        lc[o8]     = c[0]; lc[o8 + 1] = c[1]; lc[o8 + 2] = c[2]; lc[o8 + 3] = a;
+        lc[o8 + 4] = c[0]; lc[o8 + 5] = c[1]; lc[o8 + 6] = c[2]; lc[o8 + 7] = a;
       });
       this.lines.geometry.attributes.position.needsUpdate = true;
       this.lines.geometry.attributes.color.needsUpdate = true;
@@ -519,19 +529,54 @@
         else if (a) { near.add(e.t.id); this.activeEdges.add(i); }
         else if (b) { near.add(e.s.id); this.activeEdges.add(i); }
       });
+      // Nova's amplitude: active nodes are twice base size and unrelated ones
+      // collapse to a fifth of it. The previous 1.32x/0.30x spread was too
+      // timid at the top end — activated nodes grew barely enough to notice,
+      // so the tier read as a colour change rather than as structure surfacing.
       this.nodes.forEach(n => {
         if (this.active.has(n.id)) {
-          n.tier = 2; n.target = 1;    n.tAlpha = 1.0;  n.tSize = 1.32;
+          n.tier = 2; n.target = 1;    n.tAlpha = 1.0;  n.tSize = 2.00;
         } else if (near.has(n.id)) {
-          n.tier = 1; n.target = 0.35; n.tAlpha = 0.90; n.tSize = 0.86;
+          n.tier = 1; n.target = 0.35; n.tAlpha = 0.92; n.tSize = 1.00;
         } else {
-          n.tier = 0; n.target = 0;    n.tAlpha = 0.14; n.tSize = 0.30;
+          n.tier = 0; n.target = 0;    n.tAlpha = 0.12; n.tSize = 0.42;
         }
       });
-      if (this.lines) this.lines.material.opacity = 0.55;
       // A pulse of heat re-energises the layout so lit nodes visibly settle
       // into a new arrangement — motion confirms the answer changed something.
       this.alpha = Math.max(this.alpha, 0.35);
+
+      // Frame the lit subgraph. Nova refits on every activation, and without it
+      // the user has to hunt the canvas for what changed — which is most of the
+      // reason this graph did not feel like Nova's. fitTo() existed here and was
+      // never called from anywhere.
+      if (this.active.size) {
+        this.fitTo([...this.active, ...near]);
+        this._flash();
+      }
+
+      return {
+        activeCount: this.active.size,
+        neighbourCount: near.size,
+        edgeCount: this.activeEdges.size,
+      };
+    }
+
+    /**
+     * The activation flash.
+     *
+     * Nova pulses the container the instant a trace lands, so the change is
+     * felt before it is read. Re-adding the class alone will not restart a CSS
+     * animation — the reflow between removal and re-add is what re-triggers it.
+     */
+    _flash() {
+      const host = this.canvas && this.canvas.parentElement;
+      if (!host) return;
+      host.classList.remove('graph-activated');
+      void host.offsetWidth;               // force reflow — do not remove
+      host.classList.add('graph-activated');
+      clearTimeout(this._flashT);
+      this._flashT = setTimeout(() => host.classList.remove('graph-activated'), 1700);
     }
 
     /**
@@ -598,7 +643,10 @@
       this.nodes.forEach(n => {
         n.tier = 0; n.target = 0; n.tAlpha = 1; n.tSize = 1;
       });
-      if (this.lines) this.lines.material.opacity = 0.14;
+      // Pull back to the whole corpus. Staying zoomed on the previous answer's
+      // neighbourhood after it is cleared strands the viewer somewhere they did
+      // not choose to be.
+      this.fitTo(null);
     }
 
     toggleKind(kind) {
@@ -611,7 +659,10 @@
     focusNode(id) {
       const n = this.byId && this.byId.get(id);
       if (!n) return;
-      this.flyTo = { x: n.x, y: n.y, z: n.z };
+      // This used to assign `this.flyTo`, which nothing reads — the render loop
+      // eases toward `flyTarget`. Clicking a node therefore never moved the
+      // camera. illuminate() now frames the lit set itself, so delegate rather
+      // than setting the target twice and fighting over it.
       this.illuminate([id]);
     }
 
